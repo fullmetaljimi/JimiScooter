@@ -1,0 +1,20 @@
+{
+  "telegram": {
+    "botToken": "8451322350:AAGjMwOORVGUADONZyiei7hvRE2LZbPYxNM",
+    "chatId": "306647583"
+  },
+  "searches": [
+    {
+      "name": "Liguria - Moto/Scooter Genova",
+      "baseUrl": "https://www.subito.it/annunci-liguria/vendita/moto-e-scooter/genova/",
+      "queries": [
+        "people+125",
+        "agility+125",
+        "symphony+125",
+        "people+i125",
+        "sh+mode+125"
+      ]
+    }
+  ],
+  "pollIntervalSeconds": 600
+}

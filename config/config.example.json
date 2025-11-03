@@ -1,0 +1,13 @@
+c{
+  "telegram": {
+    "botToken": "<YOUR_TELEGRAM_BOT_TOKEN>",
+    "chatId": "<YOUR_TELEGRAM_CHAT_ID>"
+  },
+  "searches": [
+    {
+      "name": "Esempio - bici usata",
+      "url": "https://www.subito.it/annunci-italia/vendita/biciclette/"
+    }
+  ],
+  "pollIntervalSeconds": 300
+}

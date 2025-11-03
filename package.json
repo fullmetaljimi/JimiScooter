@@ -1,0 +1,20 @@
+{
+  "name": "subito-notifier",
+  "version": "0.1.0",
+  "description": "Semplice progetto Node.js: invio Telegram e watcher per subito.it",
+  "main": "src/subito_watcher.js",
+  "scripts": {
+    "start:watch": "node src/subito_watcher.js",
+    "start:watch:once": "node src/subito_watcher.js --once",
+    "start:bot": "node src/send_telegram.js",
+    "lint": "echo \"no lint configured\""
+  },
+  "keywords": ["subito","telegram","watcher","notifiche"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.5.0",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.0.0"
+  }
+}
