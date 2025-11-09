@@ -1,5 +1,9 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const fs = require('fs');
+const path = require('path');
+const { sendMessage } = require('./send_telegram');
+const SEEN_PATH = path.join(__dirname, '..', 'data', 'seen.json');
 
 //const URL = 'https://www.subito.it/annunci-liguria/vendita/moto-e-scooter/genova/?q=people+125';
 let knownUrls = new Set();
@@ -12,6 +16,25 @@ const URLS = [
   'https://www.subito.it/annunci-liguria/vendita/moto-e-scooter/genova/?q=agility+125'
 ];
 
+function loadSeen() {
+console.log("Caricamento file dei visti...");
+  try {
+
+      // crea file dei visti vuoto come oggetto se non esiste
+      if (!fs.existsSync(SEEN_PATH))  {
+        console.log("non c'è file dei visti, lo creo...");
+        fs.writeFileSync(SEEN_PATH, JSON.stringify({}, null, 2), 'utf8');
+        console.log('File SEEN vuoto creato con successo!');
+      }
+      return JSON.parse(fs.readFileSync(SEEN_PATH, 'utf8'));
+  } catch (err) {
+
+    console.log("Errore ad aprire seen.json " + err.message);
+
+  }
+
+} 
+
 async function checkNewAds(URL) {
   try {
     const { data } = await axios.get(URL);
@@ -21,7 +44,7 @@ async function checkNewAds(URL) {
     //console.log('📄 HTML della pagina:\n', $);
     const scripts = $('script[type="application/ld+json"]'); 
     let newFound = false;
-
+  // ...existing code...
     $('script[type="application/json"]').each((_, el) => {
       try {
         const json = JSON.parse($(el).html());
@@ -31,29 +54,45 @@ async function checkNewAds(URL) {
         const items = Array.isArray(json) ? json : [json];
         console.log(ar.length + ' annunci trovati nella pagina.');
         ar.forEach(item => {
-
             let title = item.item.subject;
             let url = item.item.urls.default;
-            let cc = item.item.features['/cubic_capacity'].values[0].value;
-            let price = item.item.features['/price'].values[0].value;
-            console.log(`🆕 Nuovo annuncio: ${title} - ${url} - ${cc}cc - €${price}`);
-
-
-            knownUrls.add(item.url);
-            newFound = true;
-        //  }
+            let cc = item.item.features['/cubic_capacity']?.values[0].value;
+            let price = item.item.features['/price']?.values[0].value;
+            if (!knownUrls.has(url)) {
+              console.log(`🆕 Nuovo annuncio: ${title} - ${url} - ${cc} - €${price}`);
+              knownUrls.add(url);
+              newFound = true;
+              // Invia messaggio Telegram
+              const msg = `🆕 ${title}\nPrezzo: €${price}\nURL: ${url}`;
+              sendMessage(msg)
+                .then(() => console.log('Messaggio Telegram inviato!'))
+                .catch(err => console.error('Errore invio Telegram:', err));
+            }
         });
       } catch (err) {
-        // Ignora blocchi non validi
+        console.log("c'è stato un errore: " + JSON.stringify(err) + " message: " + err.message + "  nello script: " + $(el).html().substring(0, 100) + "...")
       }
+      
     });
 
     if (!newFound) {
       console.log('⏳ Nessun nuovo annuncio trovato.');
+    } else {
+      // Salva il Set come array di titoli
+      fs.writeFileSync(SEEN_PATH, JSON.stringify(Array.from(knownUrls), null, 2), 'utf8');
     }
   } catch (error) {
-    console.error('❌ Errore durante la richiesta:', error.message);
+    console.log(JSON.stringify(error));
+    console.error('❌ Errore durante la richiesta: ', error.message);
   }
+}
+
+startAllStuff = () => {
+  // Carica i visti come array di URL e aggiorna il Set globale
+  const seenArr = loadSeen();
+  knownUrls = new Set(Array.isArray(seenArr) ? seenArr : []);
+  console.log(knownUrls)
+  checkAllUrls();
 }
 
 // Avvia subito, poi ogni 10 minuti
@@ -64,6 +103,5 @@ checkAllUrls = () => {
     checkNewAds(url);
   }
 };
-
-checkAllUrls();
-setInterval(checkNewAds, 10 * 60 * 1000);
+startAllStuff();
+setInterval(startAllStuff, 10 * 60 * 1000);
