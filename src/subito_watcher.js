@@ -45,6 +45,10 @@ async function checkNewAds(URL) {
   try {
     const { data } = await axios.get(URL, {
       headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'it-IT,it;q=0.9',
+        'Connection': 'keep-alive',
+        'Referer': 'https://www.google.com/',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'
       }
     });
@@ -102,7 +106,6 @@ startAllStuff = () => {
   // Carica i visti come array di URL e aggiorna il Set globale
   const seenArr = loadSeen();
   knownUrls = new Set(Array.isArray(seenArr) ? seenArr : []);
-  console.log(knownUrls)
   checkAllUrls();
 }
 
