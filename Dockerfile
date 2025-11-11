@@ -18,6 +18,6 @@ COPY . .
 # ENV TELEGRAM_CHAT_ID=your_chat_id_here
 
 # Expose no ports (script runs as a bot)
-
+EXPOSE 9696
 # Default command: run subito_watcher.js
 CMD ["node", "src/subito_watcher.js"]
