@@ -3,6 +3,17 @@ const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
 const { sendMessage } = require('./send_telegram');
+const express = require('express');
+const app = express();
+
+app.get('/keepalive', (req, res) => {
+  res.send('JimiScooter bot is running');
+});
+
+app.listen(8080, () => {
+  console.log('Listener attivo su porta 8080 per uptime robot');
+});
+
 const SEEN_PATH = path.join(__dirname, '..', 'data', 'seen.json');
 
 //const URL = 'https://www.subito.it/annunci-liguria/vendita/moto-e-scooter/genova/?q=people+125';
@@ -67,7 +78,6 @@ async function checkNewAds(URL) {
         ar = json.props.pageProps.initialState.items.list
 
         const items = Array.isArray(json) ? json : [json];
-        console.log(ar.length + ' annunci trovati nella pagina.');
         ar.forEach(item => {
             let title = item.item.subject;
             let url = item.item.urls.default;
@@ -80,7 +90,7 @@ async function checkNewAds(URL) {
               // Invia messaggio Telegram
               const msg = `🆕 ${title}\nPrezzo: €${price}\nURL: ${url}`;
               sendMessage(msg)
-                .then(() => console.log('Messaggio Telegram inviato!'))
+                .then(() => console.log(`Messaggio Telegram: ${url} inviato!`))
                 .catch(err => console.error('Errore invio Telegram:', err));
             }
         });
@@ -118,4 +128,4 @@ checkAllUrls = () => {
   }
 };
 startAllStuff();
-setInterval(startAllStuff, 30 * 60 * 1000);
+setInterval(startAllStuff, 10 * 60 * 1000);
