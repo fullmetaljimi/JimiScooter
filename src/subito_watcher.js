@@ -20,6 +20,12 @@ function loadSeen() {
 console.log("Caricamento file dei visti...");
   try {
 
+      // crea la cartella data se non esiste
+      const dataDir = path.join(__dirname, '..', 'data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+        console.log('Cartella data creata!');
+      }
       // crea file dei visti vuoto come oggetto se non esiste
       if (!fs.existsSync(SEEN_PATH))  {
         console.log("non c'è file dei visti, lo creo...");
@@ -37,7 +43,12 @@ console.log("Caricamento file dei visti...");
 
 async function checkNewAds(URL) {
   try {
-    const { data } = await axios.get(URL);
+    const { data } = await axios.get(URL, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+
     const $ = cheerio.load(data);
 
     // Mostra i primi 2000 caratteri dell'HTML
@@ -104,4 +115,4 @@ checkAllUrls = () => {
   }
 };
 startAllStuff();
-setInterval(startAllStuff, 10 * 60 * 1000);
+setInterval(startAllStuff, 30 * 60 * 1000);
