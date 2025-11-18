@@ -127,5 +127,12 @@ checkAllUrls = () => {
     checkNewAds(url);
   }
 };
+welcomeMessageToTgm = () => {
+  let msg = 'Welcome to JimiScooter scraping service - service is initiating...\nYou can check /keepalive on port: 8080'
+  sendMessage(msg)
+    .then(() => console.log(`Messaggio Telegram: ${url} inviato!`))
+    .catch(err => console.error('Errore invio Telegram:', err));
+}
+
 startAllStuff();
 setInterval(startAllStuff, 10 * 60 * 1000);

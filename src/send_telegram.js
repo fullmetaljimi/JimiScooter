@@ -43,7 +43,34 @@ async function sendMessage(text, opts = {}) {
   return resp.data;
 }
 
-module.exports = { sendMessage };
+// Funzione per ascoltare messaggi e gestire keyword
+function listenForMessages(keyword, callback) {
+  let lastUpdateId = 0;
+  const { token } = loadConfig();
+  const API_URL = `https://api.telegram.org/bot${token}`;
+  setInterval(async () => {
+    try {
+      const res = await axios.get(`${API_URL}/getUpdates?offset=${lastUpdateId + 1}`);
+      const updates = res.data.result;
+      updates.forEach(update => {
+        lastUpdateId = update.update_id;
+        const message = update.message && update.message.text;
+        if (message && message.includes(keyword)) {
+          callback(update.message);
+        }
+      });
+    } catch (err) {
+      // Ignora errori temporanei
+    }
+  }, 2000);
+}
+
+// Esempio: rispondi con messaggio keepalive
+/*listenForMessages('keepalive', (msg) => {
+  sendMessage('JimiScooter bot is running', { chat_id: msg.chat.id });
+});*/
+
+module.exports = { sendMessage, listenForMessages };
 
 // If run directly, send the provided argv as a message (or a test message)
 if (require.main === module) {
