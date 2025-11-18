@@ -128,11 +128,12 @@ checkAllUrls = () => {
   }
 };
 welcomeMessageToTgm = () => {
-  let msg = 'Welcome to JimiScooter scraping service - service is initiating...\nYou can check /keepalive on port: 8080'
+  let msg = 'Welcome to JimiScooter scraping service - service is initiating...\nYou can check /keepalive on port: 8080\nor send message "Keepalive" to the bot to get status.';
   sendMessage(msg)
     .then(() => console.log(`Messaggio Telegram: ${url} inviato!`))
     .catch(err => console.error('Errore invio Telegram:', err));
 }
 
+welcomeMessageToTgm();
 startAllStuff();
 setInterval(startAllStuff, 10 * 60 * 1000);
