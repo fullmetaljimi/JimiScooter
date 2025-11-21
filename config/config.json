@@ -16,5 +16,10 @@
       ]
     }
   ],
-  "pollIntervalSeconds": 600
+  "pollIntervalSeconds": 600,
+  "subitoFrequencyMins": 30,
+  "adsToExclude" : [
+    "guasto",
+    "riordinare"
+  ]
 }

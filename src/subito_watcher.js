@@ -5,6 +5,10 @@ const path = require('path');
 const { sendMessage } = require('./send_telegram');
 const express = require('express');
 const app = express();
+// Carica la configurazione
+const configPath = path.join(__dirname, '..', 'config', 'config.json');
+const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+const subitoFrequencyMins = config.subitoFrequencyMins || 30;
 
 app.get('/keepalive', (req, res) => {
   res.send('JimiScooter bot is running');
@@ -70,7 +74,8 @@ async function checkNewAds(URL) {
     //console.log('📄 HTML della pagina:\n', $);
     const scripts = $('script[type="application/ld+json"]'); 
     let newFound = false;
-  // ...existing code...
+    // Recupera le keywords da escludere dalla configurazione
+    const adsToExclude = config.adsToExclude || [];
     $('script[type="application/json"]').each((_, el) => {
       try {
         const json = JSON.parse($(el).html());
@@ -83,6 +88,12 @@ async function checkNewAds(URL) {
             let url = item.item.urls.default;
             let cc = item.item.features['/cubic_capacity']?.values[0].value;
             let price = item.item.features['/price']?.values[0].value;
+            // Escludi se il titolo contiene una delle keywords
+            const exclude = adsToExclude.some(keyword => title && title.toLowerCase().includes(keyword.toLowerCase()));
+            if (exclude) {
+              console.log(`Annuncio escluso per keyword: ${title}`);
+              return;
+            }
             if (!knownUrls.has(url)) {
               console.log(`🆕 Nuovo annuncio: ${title} - ${url} - ${cc} - €${price}`);
               knownUrls.add(url);
@@ -134,6 +145,7 @@ welcomeMessageToTgm = () => {
     .catch(err => console.error('Errore invio Telegram:', err));
 }
 
-welcomeMessageToTgm();
+//welcomeMessageToTgm();
 startAllStuff();
-setInterval(startAllStuff, 10 * 60 * 1000);
+console.log("Impostato intervallo di controllo ogni " + subitoFrequencyMins + " minuti.");
+setInterval(startAllStuff, subitoFrequencyMins * 60 * 1000);
