@@ -1,9 +1,39 @@
-# Subito Notifier
+# Subito Notifier + Car Watcher
 
-Progetto minimo Node.js che contiene due script:
+Progetto Node.js che contiene:
 
 - `src/send_telegram.js`: invia messaggi via Telegram Bot API
 - `src/subito_watcher.js`: interroga pagine di ricerca di subito.it e notifica i nuovi annunci via Telegram
+- **`src/car_watcher.js`**: monitora siti di auto con scheduling automatico (12:00 e 18:00), genera Excel con foto e notifica solo le novità
+
+## 🚗 Car Watcher - Monitoraggio Auto Automatico
+
+Il modulo **car_watcher** è pensato per essere deployato su una **VM Linux** e include:
+- ✅ Scansioni automatiche alle 12:00 e 18:00 ogni giorno
+- ✅ Persistenza: memorizza auto già viste in `data/seen_cars.json`
+- ✅ Report Excel con foto di ogni auto
+- ✅ Notifiche Telegram solo per auto nuove
+- ✅ Ordinamento intelligente: anno recente → km bassi
+
+### Quick Start (Linux VM)
+```bash
+# Setup
+npm install
+chmod +x setup-linux.sh
+./setup-linux.sh
+
+# Avvio in produzione con PM2
+npm install -g pm2
+pm2 start src/car_watcher.js --name car-watcher
+pm2 save
+pm2 startup
+```
+
+📖 **Documentazione completa**: [DEPLOY_LINUX.md](DEPLOY_LINUX.md)
+
+---
+
+## Subito.it Watcher (originale)
 
 Installazione
 

@@ -1,0 +1,20 @@
+[Unit]
+Description=Car Watcher - Monitoraggio Auto Automatico
+After=network.target
+
+[Service]
+Type=simple
+User=node
+WorkingDirectory=/home/node/subito-notifier
+ExecStart=/usr/bin/node /home/node/subito-notifier/src/car_watcher.js
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/car-watcher.log
+StandardError=append:/var/log/car-watcher-error.log
+
+# Variabili d'ambiente (opzionale)
+Environment=NODE_ENV=production
+Environment=TZ=Europe/Rome
+
+[Install]
+WantedBy=multi-user.target

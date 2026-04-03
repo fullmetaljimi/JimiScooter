@@ -16,5 +16,15 @@
       ]
     }
   ],
-  "pollIntervalSeconds": 600
+  "pollIntervalSeconds": 600,
+  "carWatcher": {
+    "enabled": true,
+    "urls": [
+      "https://example-auto-site.com/annunci/auto-usate",
+      "https://another-car-site.com/lista-auto"
+    ],
+    "scanIntervalMinutes": 30,
+    "exportReportToJson": true,
+    "reportPath": "./data/car_report.json"
+  }
 }
