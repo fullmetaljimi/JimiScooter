@@ -4,7 +4,6 @@ const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
-const cron = require('node-cron');
 
 // Agente HTTPS che ignora i certificati SSL non validi
 const httpsAgent = new https.Agent({
@@ -16,16 +15,40 @@ const SEEN_CARS_FILE = path.join(__dirname, '..', 'data', 'seen_cars.json');
 const EXCEL_REPORT_PATH = path.join(__dirname, '..', 'data', 'report_auto.xlsx');
 
 // Array di URL da ispezionare - configurabile
-const URLS = [
-  // Esempio: inserisci qui gli URL delle pagine con le liste di auto
+/* Commentati per test veloce:
   'https://spaziogenova.it/auto-usate-e-km-zero/?_sfm_marca=FIAT&_sfm_modello=Panda&_sfm_prezzo=8400+34060',
-  // Aggiungi altri URL qui
+  'https://spaziogenova.it/auto-usate-e-km-zero/?_sfm_marca=FIAT&_sfm_modello=Panda%20Cross&_sfm_prezzo=8400+34060',
+*/
+const URLS = [
+  'https://spaziogenova.it/auto-usate-e-km-zero/?_sfm_marca=FIAT&_sfm_modello=Panda&_sfm_prezzo=8400+34060',
+  'https://spaziogenova.it/auto-usate-e-km-zero/?_sfm_marca=FIAT&_sfm_modello=Panda%20Cross&_sfm_prezzo=8400+34060',
+  'https://spaziogenova.it/auto-usate-e-km-zero/?_sfm_marca=FIAT&_sfm_modello=Pandina&_sfm_prezzo=8400+34060'
 ];
 
 // Storage per i dati delle auto
 let carsDatabase = [];
+let carsBySourceUrl = new Map(); // Mappa: sourceUrl -> array di auto
 let processedUrls = new Set();
 let seenCarsUrls = new Set(); // URL già visti nelle scansioni precedenti
+
+/**
+ * Estrae il nome del modello dall'URL di ricerca
+ * @param {string} url - URL della ricerca
+ * @returns {string} - Nome del modello
+ */
+function extractModelNameFromUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    const modelo = urlObj.searchParams.get('_sfm_modello');
+    if (modelo) {
+      // Decodifica e pulisci il nome (es. "Panda%20Cross" -> "Panda Cross")
+      return decodeURIComponent(modelo).replace(/\+/g, ' ');
+    }
+    return 'Auto';
+  } catch (error) {
+    return 'Auto';
+  }
+}
 
 /**
  * Carica gli annunci già visti dal file JSON
@@ -89,6 +112,8 @@ async function sendExcelToTelegram(newCarsCount) {
     }
     
     console.log('\n📤 Invio report Excel via Telegram...');
+    console.log(`📍 ChatID: ${chatId}`);
+    console.log(`📊 Nuove auto da notificare: ${newCarsCount}`);
     
     // Prepara il messaggio
     const message = `🚗 <b>Nuove Auto Trovate!</b>\n\n` +
@@ -97,25 +122,29 @@ async function sendExcelToTelegram(newCarsCount) {
                    `🔍 Ordinate per anno più recente e km minori`;
     
     // Invia il messaggio
+    console.log('📨 Invio messaggio di testo...');
     const msgUrl = `https://api.telegram.org/bot${token}/sendMessage`;
-    await axios.post(msgUrl, {
+    const msgResponse = await axios.post(msgUrl, {
       chat_id: chatId,
       text: message,
       parse_mode: 'HTML'
     });
+    console.log(`✅ Messaggio di testo inviato! (ID: ${msgResponse.data.result.message_id})`);
     
     // Invia il file Excel
+    console.log('📎 Invio file Excel...');
     const formData = new (require('form-data'))();
     formData.append('chat_id', chatId);
     formData.append('document', fs.createReadStream(EXCEL_REPORT_PATH));
     formData.append('caption', `📋 Report Auto - ${new Date().toLocaleDateString('it-IT')}`);
     
     const docUrl = `https://api.telegram.org/bot${token}/sendDocument`;
-    await axios.post(docUrl, formData, {
+    const docResponse = await axios.post(docUrl, formData, {
       headers: formData.getHeaders(),
       maxContentLength: Infinity,
       maxBodyLength: Infinity
     });
+    console.log(`✅ File Excel inviato! (ID: ${docResponse.data.result.message_id})`);
     
     console.log('✅ Report inviato su Telegram con successo!');
     
@@ -230,9 +259,10 @@ async function extractCarLinksFromList(listUrl) {
 /**
  * Estrae i dettagli da un singolo annuncio
  * @param {string} carUrl - URL dell'annuncio
+ * @param {string} sourceUrl - URL di origine della ricerca
  * @returns {Object|null} - Oggetto con i dettagli dell'auto
  */
-async function extractCarDetails(carUrl) {
+async function extractCarDetails(carUrl, sourceUrl = null) {
   try {
     // Evita di processare URL già visti IN QUESTA SESSIONE
     if (processedUrls.has(carUrl)) {
@@ -371,6 +401,7 @@ async function extractCarDetails(carUrl) {
       prezzo,
       immagineUrl,
       url: carUrl,
+      sourceUrl: sourceUrl, // URL di origine della ricerca
       dataScansione: new Date().toISOString(),
       isNew: isNewCar // Flag per identificare le auto nuove
     };
@@ -389,6 +420,9 @@ async function processAllUrls() {
   
   // Carica gli annunci già visti
   loadSeenCars();
+  
+  // Resetta la mappa per la nuova scansione
+  carsBySourceUrl.clear();
   
   const allCarsFound = [];
   const allCarUrls = [];
@@ -432,9 +466,15 @@ async function processAllUrls() {
       // Piccola pausa tra le richieste per evitare di sovraccaricare il server
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const carDetails = await extractCarDetails(carUrl);
+      const carDetails = await extractCarDetails(carUrl, listUrl);
       if (carDetails) {
         allCarsFound.push(carDetails);
+        
+        // Organizza per URL di origine
+        if (!carsBySourceUrl.has(listUrl)) {
+          carsBySourceUrl.set(listUrl, []);
+        }
+        carsBySourceUrl.get(listUrl).push(carDetails);
       }
     }
   }
@@ -553,7 +593,7 @@ function exportReportToJson(filename = 'car_report.json') {
 }
 
 /**
- * Scarica un'immagine e la salva localmente
+ * Scarica un'immagine, la ottimizza e la salva localmente
  */
 async function downloadImage(imageUrl, outputPath) {
   try {
@@ -566,16 +606,23 @@ async function downloadImage(imageUrl, outputPath) {
       timeout: 10000
     });
     
-    fs.writeFileSync(outputPath, response.data);
-    return true;
+    // Salva sempre come JPEG per compatibilità mobile
+    const buffer = Buffer.from(response.data);
+    
+    // Cambia l'estensione in .jpg se necessario
+    const jpgPath = outputPath.replace(/\.(png|webp|jpeg)$/i, '.jpg');
+    
+    fs.writeFileSync(jpgPath, buffer);
+    return jpgPath;
   } catch (error) {
     console.error(`  ⚠️  Impossibile scaricare l'immagine: ${error.message}`);
-    return false;
+    return null;
   }
 }
 
 /**
  * Genera un report Excel con le immagini delle auto
+ * Crea un foglio per ogni URL di ricerca
  */
 async function generateExcelReport() {
   console.log('\n📊 === GENERAZIONE REPORT EXCEL ===\n');
@@ -584,57 +631,13 @@ async function generateExcelReport() {
     console.log('⚠️  Nessuna auto da esportare.');
     return;
   }
-
-  // Ordina i dati
-  const sortedCars = [...carsDatabase].sort((a, b) => {
-    if (a.anno !== null && b.anno !== null) {
-      if (b.anno !== a.anno) return b.anno - a.anno;
-    } else if (a.anno !== null) {
-      return -1;
-    } else if (b.anno !== null) {
-      return 1;
-    }
-    
-    if (a.km !== null && b.km !== null) {
-      return a.km - b.km;
-    } else if (a.km !== null) {
-      return -1;
-    } else if (b.km !== null) {
-      return 1;
-    }
-    
-    return 0;
-  });
+  
+  console.log(`📁 Creazione fogli separati per ${carsBySourceUrl.size} ricerche...`);
 
   // Crea il workbook
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Car Watcher';
   workbook.created = new Date();
-  
-  const worksheet = workbook.addWorksheet('Auto Trovate', {
-    views: [{ state: 'frozen', xSplit: 0, ySplit: 1 }]
-  });
-  
-  // Definisci le colonne
-  worksheet.columns = [
-    { header: 'Foto', key: 'foto', width: 20 },
-    { header: 'Nuovo', key: 'nuovo', width: 12 },
-    { header: 'Titolo', key: 'titolo', width: 40 },
-    { header: 'Anno', key: 'anno', width: 10 },
-    { header: 'Km', key: 'km', width: 15 },
-    { header: 'Prezzo (€)', key: 'prezzo', width: 15 },
-    { header: 'Link', key: 'link', width: 50 }
-  ];
-  
-  // Stile dell'intestazione
-  worksheet.getRow(1).font = { bold: true, size: 12 };
-  worksheet.getRow(1).fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FF4472C4' }
-  };
-  worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
   
   // Crea la cartella per le immagini temporanee
   const tempImageDir = path.join(__dirname, '..', 'data', 'temp_images');
@@ -642,107 +645,158 @@ async function generateExcelReport() {
     fs.mkdirSync(tempImageDir, { recursive: true });
   }
   
-  console.log('📥 Scarico le immagini e creo il file Excel...');
+  let totalImages = 0;
   
-  // Aggiungi i dati
-  for (let i = 0; i < sortedCars.length; i++) {
-    const car = sortedCars[i];
-    const rowNumber = i + 2; // +2 perché la riga 1 è l'intestazione
+  // Per ogni URL di ricerca, crea un foglio separato
+  for (const [sourceUrl, cars] of carsBySourceUrl.entries()) {
+    const modelName = extractModelNameFromUrl(sourceUrl);
+    console.log(`\n📄 Creazione foglio "${modelName}" con ${cars.length} auto...`);
     
-    // Aggiungi la riga di dati
-    const row = worksheet.addRow({
-      nuovo: car.isNew ? '✨ NUOVO' : '',
-      titolo: car.titolo,
-      anno: car.anno !== null ? car.anno : 'N/A',
-      km: car.km !== null ? car.km.toLocaleString('it-IT') : 'N/A',
-      prezzo: car.prezzo !== null ? car.prezzo.toLocaleString('it-IT') : 'N/A',
-      link: car.url
-    });
-    
-    // Imposta l'altezza della riga per contenere l'immagine
-    row.height = 100;
-    
-    // Imposta l'allineamento
-    row.alignment = { vertical: 'middle', wrapText: true };
-    
-    // Se è un annuncio nuovo, evidenzialo con sfondo verde chiaro
-    if (car.isNew) {
-      row.eachCell((cell, colNumber) => {
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFD4EDDA' } // Verde chiaro
-        };
-        cell.font = { bold: true };
-      });
-      
-      // Colonna "Nuovo" con sfondo verde scuro e testo bianco
-      worksheet.getCell(`B${rowNumber}`).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF28A745' } // Verde scuro
-      };
-      worksheet.getCell(`B${rowNumber}`).font = { 
-        bold: true, 
-        color: { argb: 'FFFFFFFF' }, // Testo bianco
-        size: 11
-      };
-      worksheet.getCell(`B${rowNumber}`).alignment = { 
-        vertical: 'middle', 
-        horizontal: 'center' 
-      };
-    }
-    
-    // Rendi il link cliccabile
-    worksheet.getCell(`G${rowNumber}`).value = {
-      text: 'Apri annuncio',
-      hyperlink: car.url
-    };
-    worksheet.getCell(`G${rowNumber}`).font = { color: { argb: 'FF0000FF' }, underline: true };
-    
-    // Scarica e aggiungi l'immagine se disponibile
-    if (car.immagineUrl) {
-      const imageExtension = car.immagineUrl.split('.').pop().split('?')[0] || 'jpg';
-      const imagePath = path.join(tempImageDir, `car_${i}.${imageExtension}`);
-      
-      console.log(`  📷 Scarico immagine ${i + 1}/${sortedCars.length}...`);
-      const success = await downloadImage(car.immagineUrl, imagePath);
-      
-      if (success && fs.existsSync(imagePath)) {
-        try {
-          const imageId = workbook.addImage({
-            filename: imagePath,
-            extension: imageExtension === 'jpg' ? 'jpeg' : imageExtension
-          });
-          
-          // Aggiungi l'immagine alla cella
-          worksheet.addImage(imageId, {
-            tl: { col: 0, row: rowNumber - 1 }, // top-left
-            ext: { width: 130, height: 90 } // dimensioni
-          });
-        } catch (error) {
-          console.error(`  ⚠️  Errore nell'aggiungere l'immagine: ${error.message}`);
-        }
+    // Ordina le auto di questo foglio
+    const sortedCars = [...cars].sort((a, b) => {
+      if (a.anno !== null && b.anno !== null) {
+        if (b.anno !== a.anno) return b.anno - a.anno;
+      } else if (a.anno !== null) {
+        return -1;
+      } else if (b.anno !== null) {
+        return 1;
       }
       
-      // Piccola pausa tra i download
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-  }
-  
-  // Aggiungi i bordi alle celle
-  const borderStyle = {
-    top: { style: 'thin' },
-    left: { style: 'thin' },
-    bottom: { style: 'thin' },
-    right: { style: 'thin' }
-  };
-  
-  worksheet.eachRow((row, rowNumber) => {
-    row.eachCell((cell) => {
-      cell.border = borderStyle;
+      if (a.km !== null && b.km !== null) {
+        return a.km - b.km;
+      } else if (a.km !== null) {
+        return -1;
+      } else if (b.km !== null) {
+        return 1;
+      }
+      
+      return 0;
     });
-  });
+    
+    // Crea il worksheet con il nome del modello
+    const worksheet = workbook.addWorksheet(modelName, {
+      views: [{ state: 'frozen', xSplit: 0, ySplit: 1 }]
+    });
+    
+    // Definisci le colonne
+    worksheet.columns = [
+      { header: 'Foto', key: 'foto', width: 20 },
+      { header: 'Nuovo', key: 'nuovo', width: 12 },
+      { header: 'Titolo', key: 'titolo', width: 40 },
+      { header: 'Anno', key: 'anno', width: 10 },
+      { header: 'Km', key: 'km', width: 15 },
+      { header: 'Prezzo (€)', key: 'prezzo', width: 15 },
+      { header: 'Link', key: 'link', width: 50 }
+    ];
+    
+    // Stile dell'intestazione
+    worksheet.getRow(1).font = { bold: true, size: 12 };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' }
+    };
+    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+    
+    // Aggiungi i dati
+    for (let i = 0; i < sortedCars.length; i++) {
+      const car = sortedCars[i];
+      const rowNumber = i + 2;
+      
+      // Aggiungi la riga di dati
+      const row = worksheet.addRow({
+        nuovo: car.isNew ? '✨ NUOVO' : '',
+        titolo: car.titolo,
+        anno: car.anno !== null ? car.anno : 'N/A',
+        km: car.km !== null ? car.km.toLocaleString('it-IT') : 'N/A',
+        prezzo: car.prezzo !== null ? car.prezzo.toLocaleString('it-IT') : 'N/A',
+        link: car.url
+      });
+      
+      row.height = 100;
+      row.alignment = { vertical: 'middle', wrapText: true };
+      
+      // Evidenzia le auto nuove
+      if (car.isNew) {
+        row.eachCell((cell, colNumber) => {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFD4EDDA' }
+          };
+          cell.font = { bold: true };
+        });
+        
+        worksheet.getCell(`B${rowNumber}`).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF28A745' }
+        };
+        worksheet.getCell(`B${rowNumber}`).font = { 
+          bold: true, 
+          color: { argb: 'FFFFFFFF' },
+          size: 11
+        };
+        worksheet.getCell(`B${rowNumber}`).alignment = { 
+          vertical: 'middle', 
+          horizontal: 'center' 
+        };
+      }
+      
+      // Link cliccabile
+      worksheet.getCell(`G${rowNumber}`).value = {
+        text: 'Apri annuncio',
+        hyperlink: car.url
+      };
+      worksheet.getCell(`G${rowNumber}`).font = { color: { argb: 'FF0000FF' }, underline: true };
+      
+      // Scarica e aggiungi immagine
+      if (car.immagineUrl) {
+        const imagePath = path.join(tempImageDir, `${modelName}_${i}.jpg`);
+        
+        totalImages++;
+        console.log(`  📷 Scarico immagine ${totalImages}...`);
+        const downloadedPath = await downloadImage(car.immagineUrl, imagePath);
+        
+        if (downloadedPath && fs.existsSync(downloadedPath)) {
+          try {
+            const imageId = workbook.addImage({
+              filename: downloadedPath,
+              extension: 'jpeg'
+            });
+            
+            // Dimensioni ottimizzate per mobile Excel
+            worksheet.addImage(imageId, {
+              tl: { col: 0, row: rowNumber - 1 },
+              ext: { width: 120, height: 80 },
+              editAs: 'oneCell' // Importante per Excel mobile
+            });
+          } catch (error) {
+            console.error(`  ⚠️  Errore immagine: ${error.message}`);
+          }
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    // Bordi
+    const borderStyle = {
+      top: { style: 'thin' },
+      left: { style: 'thin' },
+      bottom: { style: 'thin' },
+      right: { style: 'thin' }
+    };
+    
+    worksheet.eachRow((row, rowNumber) => {
+      row.eachCell((cell) => {
+        cell.border = borderStyle;
+      });
+    });
+    
+    console.log(`✅ Foglio "${modelName}" completato (${sortedCars.length} auto)`);
+  }
   
   // Salva il file Excel
   const excelPath = path.join(__dirname, '..', 'data', 'report_auto.xlsx');
@@ -761,56 +815,43 @@ async function generateExcelReport() {
   
   console.log(`\n✅ Report Excel generato con successo!`);
   console.log(`📁 Percorso: ${excelPath}`);
-  console.log(`📊 Totale auto: ${sortedCars.length}\n`);
+  console.log(`📊 Totale fogli: ${carsBySourceUrl.size}`);
+  console.log(`📊 Totale auto: ${carsDatabase.length}\n`);
 }
 
-// === ESECUZIONE E SCHEDULING ===
+// === ESPORTAZIONE MODULO ===
 
-console.log('\n🕒 === CAR WATCHER SCHEDULER ===\n');
-console.log('📅 Scansioni programmate:');
-console.log('   ⏰ Ore 12:00 (mezzogiorno)');
-console.log('   ⏰ Ore 18:00 (sera)\n');
-
-// Funzione wrapper per la scansione schedulata
-async function runScheduledScan() {
+/**
+ * Esegue una scansione completa delle auto
+ * Questa è la funzione principale che può essere chiamata dallo scheduler
+ */
+async function runCarScan() {
   const now = new Date();
-  console.log(`\n🔔 === SCANSIONE PROGRAMMATA AVVIATA ===`);
+  console.log(`\n🚗 === CAR WATCHER - SCANSIONE AVVIATA ===`);
   console.log(`🕒 Ora: ${now.toLocaleString('it-IT')}\n`);
   
   try {
     await processAllUrls();
-    console.log(`\n✅ Scansione completata alle ${new Date().toLocaleTimeString('it-IT')}`);
+    console.log(`\n✅ Car Watcher completato alle ${new Date().toLocaleTimeString('it-IT')}`);
   } catch (error) {
-    console.error('❌ Errore durante la scansione:', error.message);
+    console.error('❌ Errore Car Watcher:', error.message);
+    throw error; // Rilancia per permettere allo scheduler di gestire l'errore
   }
 }
 
-// Scansione alle 12:00 (mezzogiorno)
-cron.schedule('0 12 * * *', () => {
-  runScheduledScan();
-}, {
-  timezone: 'Europe/Rome'
-});
+// Esporta la funzione di scansione per essere usata da scheduler.js e main.js
+module.exports = runCarScan;
 
-// Scansione alle 18:00 (sera)
-cron.schedule('0 18 * * *', () => {
-  runScheduledScan();
-}, {
-  timezone: 'Europe/Rome'
-});
-
-console.log('✅ Scheduler attivato con successo!');
-console.log('🛡️  Il programma resterà in esecuzione in background...');
-console.log('🚫 Per terminare premi CTRL+C\n');
-
-// Esegui una scansione immediata all'avvio (opzionale)
-const SCAN_ON_STARTUP = true;
-
-if (SCAN_ON_STARTUP) {
-  console.log('🚀 Eseguo scansione iniziale all\'avvio...\n');
-  runScheduledScan().then(() => {
-    console.log('\n⏳ In attesa della prossima scansione programmata...');
-  });
-} else {
-  console.log('⏳ In attesa della prossima scansione programmata...');
+// Se eseguito direttamente (es: node src/car_watcher.js), esegue una scansione singola
+if (require.main === module) {
+  console.log('🚗 Car Watcher - Modalità esecuzione diretta\n');
+  runCarScan()
+    .then(() => {
+      console.log('\n✅ Scansione completata. Il processo terminerà ora.');
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error('\n❌ Errore fatale:', error);
+      process.exit(1);
+    });
 }

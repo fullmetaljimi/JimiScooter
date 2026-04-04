@@ -31,6 +31,22 @@ pm2 startup
 
 📖 **Documentazione completa**: [DEPLOY_LINUX.md](DEPLOY_LINUX.md)
 
+### 🚀 Deploy Automatico su Google Cloud
+
+Per configurare il **deploy automatico** su Google Cloud Platform con GitHub Actions e PM2:
+
+```bash
+# Sulla VM Google Cloud
+./setup-gcp.sh
+```
+
+Ogni push su `main` attiverà automaticamente:
+- 🔄 Pull del codice
+- 📦 Installazione dipendenze
+- ♻️ Restart PM2
+
+📖 **Guida completa**: [DEPLOY_GCP.md](DEPLOY_GCP.md)
+
 ---
 
 ## Subito.it Watcher (originale)

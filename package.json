@@ -4,11 +4,19 @@
   "description": "Semplice progetto Node.js: invio Telegram e watcher per subito.it",
   "main": "src/subito_watcher.js",
   "scripts": {
+    "start": "node src/main.js",
     "start:watch": "node src/subito_watcher.js",
     "start:watch:once": "node src/subito_watcher.js --once",
     "start:bot": "node src/send_telegram.js",
     "start:car-watcher": "node src/car_watcher.js",
     "car-watcher:scheduled": "node src/car_watcher.js",
+    "test:car-excel": "node src/test_car_excel_telegram.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop subito-notifier",
+    "pm2:restart": "pm2 restart subito-notifier",
+    "pm2:logs": "pm2 logs subito-notifier",
+    "pm2:status": "pm2 status",
+    "pm2:monit": "pm2 monit",
     "lint": "echo \"no lint configured\""
   },
   "keywords": [
