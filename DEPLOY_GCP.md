@@ -776,12 +776,12 @@ pm2 set pm2-logrotate:compress true
 
 ---
 
-## 🚀 Deploy Manuale (senza GitHub Actions)
+## 🚀 Deploy Manuale Via SSH (alternativo a GitHub Actions)
 
-Se preferisci fare deploy manuale via SSH:
+Se preferisci fare deploy **completamente manuale** bypassando GitHub Actions:
 
 ```bash
-# Sulla tua macchina locale
+# Sulla tua macchina locale, connettiti via SSH
 ssh your-vm-user@your-vm-ip
 
 # Sulla VM
@@ -793,6 +793,10 @@ Lo script `deploy.sh` fa automaticamente:
 - Pull del codice
 - Install dipendenze
 - Restart PM2
+
+**💡 Differenza con "Run workflow" di GitHub:**
+- **"Run workflow" su GitHub**: Esegue il workflow automatico via GitHub Actions (consigliato)
+- **SSH + deploy.sh**: Bypassa GitHub Actions, deploy completamente manuale dalla VM
 
 ---
 
