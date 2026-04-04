@@ -449,6 +449,76 @@ pm2 startup
 pm2 save
 ```
 
+### ❌ PM2 Gira Come Root (IMPORTANTE!)
+
+**Problema:** PM2 è stato avviato con `sudo` e ora gira come root invece che come il tuo user
+
+**Come verificare:**
+```bash
+# Verifica chi sta eseguendo PM2
+ps aux | grep PM2
+
+# Se vedi "root" invece del tuo username, hai questo problema!
+```
+
+**Perché è un problema:**
+- ❌ **Sicurezza**: App con privilegi root (pericoloso)
+- ❌ **Permessi**: File creati come root non accessibili dal tuo user
+- ❌ **GitHub Actions**: Il deploy SSH usa il tuo user, non root
+- ❌ **Conflitti**: PM2 root e PM2 user sono istanze separate
+
+**Soluzione - Migrare PM2 da root al tuo user:**
+
+```bash
+# 1. Ferma PM2 root
+sudo pm2 stop all
+sudo pm2 delete all
+sudo pm2 kill
+
+# 2. Rimuovi startup root
+sudo pm2 unstartup
+
+# 3. Verifica che sia tutto pulito
+sudo pm2 status
+# Dovrebbe dire "No process found"
+
+# 4. Torna al tuo user normale (NON usare sudo!)
+cd ~/subito-notifier
+
+# 5. Avvia PM2 come TUO USER (senza sudo!)
+pm2 start ecosystem.config.js
+
+# 6. Verifica che giri come tuo user
+pm2 status
+ps aux | grep PM2
+# Dovresti vedere il TUO username, non root!
+
+# 7. Salva configurazione
+pm2 save
+
+# 8. Setup startup come tuo user
+pm2 startup
+# Esegui il comando sudo mostrato nell'output (normale che richieda sudo per creare il systemd service)
+
+# 9. Salva di nuovo dopo startup
+pm2 save
+```
+
+**Verifica finale:**
+```bash
+# Controlla proprietà dei file
+ls -la ~/subito-notifier/logs/
+# Dovresti vedere il TUO username, non root
+
+# Test reboot
+sudo reboot
+# Dopo il reboot, riconnettiti e verifica:
+pm2 status
+# Dovrebbe mostrare l'app running automaticamente
+```
+
+**⚠️ RICORDA**: Non usare mai `sudo pm2` - PM2 deve girare come il tuo user normale!
+
 ### ❌ "npm install" Fallisce Durante Deploy
 
 **Problema:** Errore durante installazione dipendenze
