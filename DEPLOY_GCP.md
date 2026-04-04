@@ -29,11 +29,14 @@ Guida completa per configurare il deploy automatico su una VM Google Cloud con G
 ```
 
 **Workflow:**
-1. Fai commit e push su `main` o `master`
+1. Fai commit e push su `main` o `master` (deploy automatico)
+   - **OPPURE** esegui deploy manuale dalla UI GitHub Actions
 2. GitHub Actions si attiva automaticamente
 3. Connessione SSH alla VM
 4. Pull del codice, install dipendenze
 5. Restart automatico PM2
+
+💡 **Deploy manuale**: Puoi anche avviare il deploy dalla UI di GitHub senza fare push (utile per rideploy urgenti).
 
 ---
 
