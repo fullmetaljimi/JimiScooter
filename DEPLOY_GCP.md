@@ -301,6 +301,21 @@ git commit -m "feat: add CI/CD with GitHub Actions and PM2"
 git push origin main
 ```
 
+### Deploy Manuale (senza fare push)
+
+Puoi anche eseguire il deploy **manualmente** dalla UI di GitHub senza fare commit:
+
+1. Vai su **GitHub → Actions**
+2. Nella sidebar sinistra, click su **"Deploy to Google Cloud VM"**
+3. Click sul pulsante **"Run workflow"** (in alto a destra)
+4. Seleziona il branch (es: `main`)
+5. Click **"Run workflow"** verde
+
+Il deploy partirà immediatamente! Utile per:
+- 🔄 Rideploy dopo fix su VM
+- 🧪 Testare il workflow senza modificare codice
+- 🚀 Deploy urgente senza commit
+
 ### Monitora il Deploy
 
 1. Vai su **GitHub → Actions**
@@ -434,6 +449,75 @@ chmod 600 ~/.ssh/authorized_keys
 # Verifica permessi directory .ssh
 chmod 700 ~/.ssh
 ```
+
+### ❌ GitHub Actions: "Command failed: ssh-add -" (Setup SSH)
+
+**Problema:** GitHub Actions fallisce nello step "Setup SSH" con errore `ssh-add -`
+
+**Causa:** Il secret `SSH_PRIVATE_KEY` è malformato o incompleto
+
+**Soluzione:**
+
+1. **Sulla VM**, rigenera e visualizza correttamente la chiave:
+
+```bash
+# Visualizza la chiave privata COMPLETA
+cat ~/.ssh/github_actions
+
+# L'output deve essere ESATTAMENTE così (con BEGIN e END):
+# -----BEGIN OPENSSH PRIVATE KEY-----
+# b3BlbnNzaC1rZXktdjEAAAA...
+# (molte righe)
+# ...AAAADmdpdGh1Yi1hY3Rpb25z
+# -----END OPENSSH PRIVATE KEY-----
+```
+
+2. **Copia TUTTA la chiave** (incluse le righe BEGIN/END)
+   - Seleziona dall'inizio di `-----BEGIN` fino alla fine di `-----END-----`
+   - ⚠️ Non aggiungere spazi, a-capo extra, o commenti
+
+3. **Su GitHub**, aggiorna il secret:
+   - Vai su **Repository → Settings → Secrets and variables → Actions**
+   - Trova `SSH_PRIVATE_KEY`
+   - Click sull'icona **matita** (Edit) o **Remove** e ricrealo
+   - Incolla la chiave ESATTAMENTE come copiata
+   - **NON** aggiungere nulla prima o dopo
+
+4. **Verifica formato corretto**:
+
+```bash
+# Sulla VM, conta le righe della chiave
+cat ~/.ssh/github_actions | wc -l
+# Dovrebbe essere circa 7-8 righe
+
+# Verifica inizio e fine
+head -n 1 ~/.ssh/github_actions
+# Output: -----BEGIN OPENSSH PRIVATE KEY-----
+
+tail -n 1 ~/.ssh/github_actions  
+# Output: -----END OPENSSH PRIVATE KEY-----
+```
+
+**❌ Errori comuni:**
+- Copiare solo parte della chiave
+- Aggiungere `#` all'inizio delle righe
+- Aggiungere spazi extra o tab
+- Copiare dal browser che aggiunge caratteri invisibili
+
+**💡 Consiglio:** 
+```bash
+# Copia la chiave in un file temporaneo per essere sicuro
+cat ~/.ssh/github_actions > /tmp/key.txt
+cat /tmp/key.txt
+# Copia da qui e incolla su GitHub
+```
+
+5. **Riprova il deploy:**
+   - Fai un commit dummy per riattivare Actions
+   ```bash
+   git commit --allow-empty -m "fix: update SSH key"
+   git push origin main
+   ```
 
 ### ❌ PM2 Non Parte Dopo Reboot
 
