@@ -519,6 +519,72 @@ pm2 status
 
 **⚠️ RICORDA**: Non usare mai `sudo pm2` - PM2 deve girare come il tuo user normale!
 
+### ❌ Git/File con Permessi Root
+
+**Problema:** File del repository appartengono a root invece che al tuo user
+
+**Come verificare:**
+```bash
+# Controlla proprietà dei file del progetto
+ls -la ~/subito-notifier/
+# Se vedi "root root" invece del tuo username → problema!
+
+# Controlla chi ha clonato il repository
+ls -la ~/subito-notifier/.git/
+```
+
+**⚠️ IMPORTANTE - Chiarimento:**
+- ✅ **Git installato globalmente come root è OK**: `sudo apt install git` è corretto
+- ❌ **Usare git con sudo è SBAGLIATO**: `sudo git clone`, `sudo git pull` creano file root
+
+**Soluzione - Cambia proprietà dei file al tuo user:**
+
+```bash
+# 1. Verifica il tuo username
+whoami
+# Output esempio: lucamuscari
+
+# 2. Cambia proprietà di TUTTI i file del progetto al tuo user
+cd ~
+sudo chown -R $(whoami):$(whoami) ~/subito-notifier/
+
+# 3. Verifica il fix
+ls -la ~/subito-notifier/
+# Ora dovresti vedere il TUO username, non root ✅
+
+# 4. Verifica directory critiche
+ls -la ~/subito-notifier/data/
+ls -la ~/subito-notifier/logs/
+ls -la ~/subito-notifier/node_modules/
+# Tutte devono appartenere al tuo user
+```
+
+**Prevenzione futura:**
+```bash
+# ❌ MAI fare questo:
+sudo git clone ...
+sudo git pull
+sudo npm install
+
+# ✅ SEMPRE fare questo (senza sudo):
+git clone ...
+git pull
+npm install
+```
+
+**Se GitHub Actions continua a fallire dopo il fix:**
+```bash
+# Rimuovi e ri-clona il repository come tuo user
+cd ~
+rm -rf subito-notifier  # ATTENZIONE: backup config.json prima!
+git clone git@github.com:USERNAME/REPO.git subito-notifier
+cd subito-notifier
+npm install
+# Ripristina config.json
+pm2 start ecosystem.config.js
+pm2 save
+```
+
 ### ❌ "npm install" Fallisce Durante Deploy
 
 **Problema:** Errore durante installazione dipendenze
