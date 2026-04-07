@@ -30,6 +30,7 @@ let carsDatabase = [];
 let carsBySourceUrl = new Map(); // Mappa: sourceUrl -> array di auto
 let processedUrls = new Set();
 let seenCarsUrls = new Set(); // URL già visti nelle scansioni precedenti
+let seenCarsDetails = new Map(); // Dettagli completi delle auto già viste (URL -> dettagli)
 
 /**
  * Estrae il nome del modello dall'URL di ricerca
@@ -59,28 +60,40 @@ function loadSeenCars() {
       const data = fs.readFileSync(SEEN_CARS_FILE, 'utf-8');
       const seenData = JSON.parse(data);
       seenCarsUrls = new Set(seenData.urls || []);
-      console.log(`📂 Caricati ${seenCarsUrls.size} annunci già visti dall'archivio`);
+      
+      // Carica anche i dettagli completi delle auto
+      if (seenData.carsDetails && Array.isArray(seenData.carsDetails)) {
+        seenCarsDetails = new Map(seenData.carsDetails.map(car => [car.url, car]));
+        console.log(`📂 Caricati ${seenCarsUrls.size} annunci già visti dall'archivio (${seenCarsDetails.size} con dettagli)`);
+      } else {
+        console.log(`📂 Caricati ${seenCarsUrls.size} annunci già visti dall'archivio`);
+      }
     } else {
       console.log('📂 Nessun archivio precedente trovato, prima scansione');
     }
   } catch (error) {
     console.error('⚠️  Errore nel caricamento archivio:', error.message);
     seenCarsUrls = new Set();
+    seenCarsDetails = new Map();
   }
 }
 
 /**
  * Salva gli annunci visti nel file JSON
  */
-function saveSeenCars(newUrls) {
+function saveSeenCars(allCarsWithDetails) {
   try {
-    // Aggiungi i nuovi URL a quelli già visti
-    newUrls.forEach(url => seenCarsUrls.add(url));
+    // Aggiorna i dettagli di tutte le auto
+    allCarsWithDetails.forEach(car => {
+      seenCarsUrls.add(car.url);
+      seenCarsDetails.set(car.url, car);
+    });
     
     const dataToSave = {
       lastUpdate: new Date().toISOString(),
       totalCars: seenCarsUrls.size,
-      urls: Array.from(seenCarsUrls)
+      urls: Array.from(seenCarsUrls),
+      carsDetails: Array.from(seenCarsDetails.values())
     };
     
     fs.writeFileSync(SEEN_CARS_FILE, JSON.stringify(dataToSave, null, 2), 'utf-8');
@@ -457,16 +470,30 @@ async function processAllUrls() {
     for (const carUrl of uniqueCarLinks) {
       allCarUrls.push(carUrl);
       
-      // Se l'auto è già stata vista, skippa (a meno che sia la prima scansione)
+      let carDetails = null;
+      
+      // Se l'auto è già stata vista, prova a usare i dettagli salvati
       if (seenCarsUrls.size > 0 && seenCarsUrls.has(carUrl)) {
-        console.log(`  ⏭️  Già visto: ${carUrl.split('/').pop()}`);
-        continue;
+        // Recupera i dettagli salvati se disponibili
+        if (seenCarsDetails.has(carUrl)) {
+          console.log(`  ⏭️  Già visto (cached): ${carUrl.split('/').pop()}`);
+          carDetails = {...seenCarsDetails.get(carUrl)}; // Copia i dettagli
+          carDetails.isNew = false; // Assicurati che sia marcato come non nuovo
+        } else {
+          // Auto già vista ma senza dettagli salvati: scarica i dettagli
+          console.log(`  🔄 Già visto (recupero dettagli): ${carUrl.split('/').pop()}`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          carDetails = await extractCarDetails(carUrl, listUrl);
+          if (carDetails) {
+            carDetails.isNew = false; // Non è nuova, la conoscevamo già
+          }
+        }
+      } else {
+        // Nuova auto: scarica i dettagli
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        carDetails = await extractCarDetails(carUrl, listUrl);
       }
       
-      // Piccola pausa tra le richieste per evitare di sovraccaricare il server
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const carDetails = await extractCarDetails(carUrl, listUrl);
       if (carDetails) {
         allCarsFound.push(carDetails);
         
@@ -489,30 +516,17 @@ async function processAllUrls() {
 
   // Se ci sono nuove auto, aggiorna il database e notifica
   if (newCars.length > 0) {
-    // Carica il database esistente se presente
-    if (seenCarsUrls.size > 0) {
-      // Carica le auto esistenti dal file JSON (se esiste)
-      try {
-        if (fs.existsSync(SEEN_CARS_FILE)) {
-          const seenData = JSON.parse(fs.readFileSync(SEEN_CARS_FILE, 'utf-8'));
-          // Qui potresti caricare anche i dettagli se li avessi salvati
-        }
-      } catch (e) {
-        // Ignora errori
-      }
-    }
-    
-    // Aggiungi le nuove auto al database
+    // Il database contiene TUTTE le auto (vecchie + nuove)
     carsDatabase = [...allCarsFound];
 
     // Genera il report console
     generateReport();
     
-    // Genera il report Excel con immagini
+    // Genera il report Excel con immagini (tutte le auto, nuove in verde)
     await generateExcelReport();
     
-    // Salva gli URL nel file di stato
-    saveSeenCars(allCarUrls);
+    // Salva tutti i dettagli nel file di stato
+    saveSeenCars(allCarsFound);
     
     // Invia notifica Telegram
     await sendExcelToTelegram(newCars.length);
@@ -535,7 +549,7 @@ function generateReport() {
   }
 
   // Ordina: prima per anno decrescente (più recente prima), 
-  // poi per km crescente (meno km prima)
+  // poi per km crescente (meno km prima), infine per prezzo crescente
   const sortedCars = [...carsDatabase].sort((a, b) => {
     // Prima ordina per anno (decrescente)
     if (a.anno !== null && b.anno !== null) {
@@ -548,11 +562,20 @@ function generateReport() {
     
     // Se l'anno è uguale (o entrambi mancanti), ordina per km (crescente)
     if (a.km !== null && b.km !== null) {
-      return a.km - b.km;
+      if (a.km !== b.km) return a.km - b.km;
     } else if (a.km !== null) {
       return -1; // a ha km, b no -> a viene prima
     } else if (b.km !== null) {
       return 1; // b ha km, a no -> b viene prima
+    }
+    
+    // Se anno e km sono uguali, ordina per prezzo (crescente)
+    if (a.prezzo !== null && b.prezzo !== null) {
+      return a.prezzo - b.prezzo;
+    } else if (a.prezzo !== null) {
+      return -1; // a ha prezzo, b no -> a viene prima
+    } else if (b.prezzo !== null) {
+      return 1; // b ha prezzo, a no -> b viene prima
     }
     
     return 0;
@@ -663,10 +686,18 @@ async function generateExcelReport() {
       }
       
       if (a.km !== null && b.km !== null) {
-        return a.km - b.km;
+        if (a.km !== b.km) return a.km - b.km;
       } else if (a.km !== null) {
         return -1;
       } else if (b.km !== null) {
+        return 1;
+      }
+      
+      if (a.prezzo !== null && b.prezzo !== null) {
+        return a.prezzo - b.prezzo;
+      } else if (a.prezzo !== null) {
+        return -1;
+      } else if (b.prezzo !== null) {
         return 1;
       }
       
