@@ -31,20 +31,22 @@ jobs:
       
       - name: 🚀 Deploy to VM
         env:
+          VM_USER: ${{ secrets.VM_USER }}
           VM_NAME: ${{ secrets.GCP_VM_NAME }}
           GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
           GCP_ZONE: ${{ secrets.GCP_ZONE }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          gcloud compute ssh $VM_NAME \
-            --project=$GCP_PROJECT \
-            --zone=$GCP_ZONE \
+          gcloud compute ssh ${VM_USER}@${VM_NAME} \
+            --project=${GCP_PROJECT} \
+            --zone=${GCP_ZONE} \
             --tunnel-through-iap \
             --command="
               set -e
               
+              echo '👤 Current user: \$(whoami)'
               echo '📂 Navigating to deployment directory...'
-              cd $DEPLOY_PATH
+              cd ${DEPLOY_PATH}
               
               echo '🔄 Pulling latest changes...'
               git pull origin main || git pull origin master

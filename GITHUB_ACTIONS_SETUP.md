@@ -43,11 +43,14 @@ L'ID del tuo progetto GCP (es. `my-project-123456`)
 ### 3. `GCP_ZONE`
 La zona dove si trova la VM (es. `europe-west1-b`)
 
-### 4. `VM_NAME`
+### 4. `GCP_VM_NAME`
 Il nome della VM (es. `subito-notifier-vm`)
 
-### 5. `DEPLOY_PATH`
-Il percorso dove si trova il codice sulla VM (es. `/home/user/subito-notifier`)
+### 5. `VM_USER`
+L'username SSH sulla VM (es. `your-username` - NON il service account, ma l'utente Linux sulla VM)
+
+### 6. `DEPLOY_PATH`
+Il percorso dove si trova il codice sulla VM (es. `/home/your-username/subito-notifier`)
 
 ## 🔒 Configurare IAP sulla VM
 
@@ -79,7 +82,7 @@ gcloud compute ssh YOUR_VM_NAME \
 ## 📋 Checklist Pre-Deploy
 
 - [ ] Service account creato e chiave JSON configurata in `GCP_SA_KEY`
-- [ ] Tutti i 5 secret configurati su GitHub
+- [ ] Tutti i 6 secret configurati su GitHub
 - [ ] Firewall rule per IAP creata
 - [ ] Tag `allow-ssh-from-iap` aggiunto alla VM
 - [ ] IAP tunnel funzionante (testato localmente)
