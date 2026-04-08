@@ -28,6 +28,7 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           ssh-keygen -t rsa -b 4096 -f ~/.ssh/google_compute_engine -N ""
+          chmod 600 ~/.ssh/google_compute_engine
       
       - name: 🚀 Deploy to VM
         env:
@@ -41,10 +42,12 @@ jobs:
             --project=${GCP_PROJECT} \
             --zone=${GCP_ZONE} \
             --tunnel-through-iap \
+            --ssh-key-file=~/.ssh/google_compute_engine \
             --command="
               set -e
               
-              echo '👤 Current user: \$(whoami)'
+              echo '👤 Current user:'
+              whoami
               echo '📂 Navigating to deployment directory...'
               cd ${DEPLOY_PATH}
               

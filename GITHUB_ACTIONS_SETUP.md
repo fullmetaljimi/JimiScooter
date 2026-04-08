@@ -61,6 +61,18 @@ gcloud compute firewall-rules create allow-ssh-ingress-from-iap \
   --direction=INGRESS \
   --action=allow \
   --rules=tcp:22 \
+  --source-ranges=35.235.240.0/20
+
+# Aggiungi il tag alla VM
+gcloud compute instances add-tags YOUR_VM_NAME \
+  --zone=YOUR_ZONE \
+  --tags=allow-ssh-from-iap
+
+# IMPORTANTE: Disabilita OS Login sulla VM per usare l'utente specificato
+gcloud compute instances add-metadata YOUR_VM_NAME \
+  --zone=YOUR_ZONE \
+  --metadata=enable-oslogin=FALSE
+```
   --source-ranges=35.235.240.0/20 \
   --target-tags=allow-ssh-from-iap
 
@@ -78,6 +90,38 @@ gcloud compute ssh YOUR_VM_NAME \
   --zone=YOUR_ZONE \
   --tunnel-through-iap
 ```
+
+## ⚠️ Risolvere il problema OS Login
+
+GCP usa OS Login per gestire l'accesso SSH con i service account. Hai due opzioni:
+
+### **Opzione A: Disabilita OS Login** (consigliato se usi già chiavi SSH tradizionali)
+
+```bash
+# Disabilita OS Login sulla VM
+gcloud compute instances add-metadata YOUR_VM_NAME \
+  --zone=YOUR_ZONE \
+  --metadata=enable-oslogin=FALSE
+```
+
+Poi assicurati che la chiave SSH pubblica del service account sia nel file `~/.ssh/authorized_keys` dell'utente sulla VM.
+
+### **Opzione B: Usa OS Login e dai permessi al Service Account**
+
+Se vuoi mantenere OS Login attivo, devi dare accesso alla directory al service account:
+
+```bash
+# Sulla VM, esegui come l'utente proprietario della directory:
+# Trova l'username del service account (sarà tipo sa_xxxxxxxxxxxxx)
+# Poi dai i permessi:
+sudo setfacl -R -m u:sa_100741884795442469954:rwx /path/to/your/deploy/directory
+sudo setfacl -R -d -m u:sa_100741884795442469954:rwx /path/to/your/deploy/directory
+
+# Oppure cambia proprietario:
+sudo chown -R sa_100741884795442469954:sa_100741884795442469954 /path/to/deploy
+```
+
+**Nota**: Con OS Login abilitato, il parametro `VM_USER` viene ignorato e usa sempre il service account.
 
 ## 📋 Checklist Pre-Deploy
 
