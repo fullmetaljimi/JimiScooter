@@ -4,6 +4,7 @@ const ExcelJS = require('exceljs');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const { Storage } = require('@google-cloud/storage');
 
 // Agente HTTPS che ignora i certificati SSL non validi
 const httpsAgent = new https.Agent({
@@ -13,6 +14,12 @@ const httpsAgent = new https.Agent({
 // Path per salvare gli annunci già visti
 const SEEN_CARS_FILE = path.join(__dirname, '..', 'data', 'seen_cars.json');
 const EXCEL_REPORT_PATH = path.join(__dirname, '..', 'data', 'report_auto.xlsx');
+const GCS_URL_FILE = path.join(__dirname, '..', 'data', 'last_gcs_url.txt');
+
+// Google Cloud Storage configuration
+const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'subito-notifier-files';
+const GCS_FILE_NAME = 'report_auto.xlsx';
+const storage = new Storage(); // Usa le credenziali del service account sulla VM
 
 // Array di URL da ispezionare - configurabile
 /* Commentati per test veloce:
@@ -104,9 +111,12 @@ function saveSeenCars(allCarsWithDetails) {
 }
 
 /**
- * Invia il file Excel via Telegram
+ * Invia notifica Telegram con link al file Excel su GCS
+ * @param {number} newCarsCount - Numero di nuove auto trovate
+ * @param {number} totalCarsCount - Numero totale di auto nel database
+ * @param {string} gcsUrl - URL pubblico del file su Google Cloud Storage
  */
-async function sendExcelToTelegram(newCarsCount) {
+async function sendTelegramNotification(newCarsCount, totalCarsCount, gcsUrl) {
   try {
     // Carica configurazione Telegram
     const configPath = path.join(__dirname, '..', 'config', 'config.json');
@@ -124,45 +134,104 @@ async function sendExcelToTelegram(newCarsCount) {
       return;
     }
     
-    console.log('\n📤 Invio report Excel via Telegram...');
-    console.log(`📍 ChatID: ${chatId}`);
-    console.log(`📊 Nuove auto da notificare: ${newCarsCount}`);
+    if (!gcsUrl) {
+      console.log('⚠️  URL GCS non disponibile, skip invio');
+      return;
+    }
     
-    // Prepara il messaggio
-    const message = `🚗 <b>Nuove Auto Trovate!</b>\n\n` +
-                   `✨ <b>${newCarsCount}</b> ${newCarsCount === 1 ? 'nuova auto' : 'nuove auto'} disponibili\n` +
-                   `📊 Report Excel allegato con tutti i dettagli\n\n` +
-                   `🔍 Ordinate per anno più recente e km minori`;
+    console.log('\n📤 Invio notifica Telegram...');
+    console.log(`📍 ChatID: ${chatId}`);
+    
+    // Prepara il messaggio in base alla presenza di nuove auto
+    let message;
+    if (newCarsCount > 0) {
+      message = `🚗 <b>Nuove Auto Trovate!</b>\n\n` +
+                `✨ <b>${newCarsCount}</b> ${newCarsCount === 1 ? 'nuova auto' : 'nuove auto'} disponibili\n` +
+                `📊 Totale auto in catalogo: <b>${totalCarsCount}</b>\n\n` +
+                `🔍 Ordinate per anno più recente e km minori\n` +
+                `📅 ${new Date().toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n\n` +
+                `📥 <a href="${gcsUrl}">Scarica Report Excel</a>`;
+    } else {
+      message = `✅ <b>Scansione Auto Completata</b>\n\n` +
+                `ℹ️  Nessuna nuova auto trovata\n` +
+                `📊 Totale auto in catalogo: <b>${totalCarsCount}</b>\n\n` +
+                `📅 ${new Date().toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n\n` +
+                `📥 <a href="${gcsUrl}">Scarica Report Excel</a>`;
+    }
     
     // Invia il messaggio
-    console.log('📨 Invio messaggio di testo...');
     const msgUrl = `https://api.telegram.org/bot${token}/sendMessage`;
     const msgResponse = await axios.post(msgUrl, {
       chat_id: chatId,
       text: message,
-      parse_mode: 'HTML'
+      parse_mode: 'HTML',
+      disable_web_page_preview: false
     });
-    console.log(`✅ Messaggio di testo inviato! (ID: ${msgResponse.data.result.message_id})`);
-    
-    // Invia il file Excel
-    console.log('📎 Invio file Excel...');
-    const formData = new (require('form-data'))();
-    formData.append('chat_id', chatId);
-    formData.append('document', fs.createReadStream(EXCEL_REPORT_PATH));
-    formData.append('caption', `📋 Report Auto - ${new Date().toLocaleDateString('it-IT')}`);
-    
-    const docUrl = `https://api.telegram.org/bot${token}/sendDocument`;
-    const docResponse = await axios.post(docUrl, formData, {
-      headers: formData.getHeaders(),
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity
-    });
-    console.log(`✅ File Excel inviato! (ID: ${docResponse.data.result.message_id})`);
-    
-    console.log('✅ Report inviato su Telegram con successo!');
+    console.log(`✅ Notifica inviata! (ID: ${msgResponse.data.result.message_id})`);
     
   } catch (error) {
     console.error('❌ Errore nell\'invio Telegram:', error.message);
+  }
+}
+
+/**
+ * Carica il file Excel su Google Cloud Storage
+ * @returns {Promise<string>} - URL pubblico del file
+ */
+async function uploadExcelToGCS() {
+  try {
+    console.log('\n☁️  === UPLOAD SU GOOGLE CLOUD STORAGE ===\n');
+    
+    if (!fs.existsSync(EXCEL_REPORT_PATH)) {
+      throw new Error('File Excel non trovato');
+    }
+
+    const bucket = storage.bucket(GCS_BUCKET_NAME);
+    
+    // Upload del file
+    console.log(`📤 Caricamento su gs://${GCS_BUCKET_NAME}/${GCS_FILE_NAME}...`);
+    await bucket.upload(EXCEL_REPORT_PATH, {
+      destination: GCS_FILE_NAME,
+      metadata: {
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        cacheControl: 'public, max-age=300', // Cache 5 minuti
+      },
+      public: true, // Rende il file pubblicamente accessibile
+    });
+
+    // URL pubblico del file
+    const publicUrl = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${GCS_FILE_NAME}`;
+    
+    console.log(`✅ File caricato con successo!`);
+    console.log(`🔗 URL pubblico: ${publicUrl}`);
+    
+    // Salva l'URL per uso futuro
+    fs.writeFileSync(GCS_URL_FILE, publicUrl, 'utf-8');
+    
+    return publicUrl;
+    
+  } catch (error) {
+    console.error('❌ Errore nel caricamento su GCS:', error.message);
+    // Non blocchiamo l'esecuzione se fallisce l'upload
+    return null;
+  }
+}
+
+/**
+ * Carica l'ultimo URL GCS salvato
+ * @returns {string|null} - URL precedente o null se non esiste
+ */
+function getLastGcsUrl() {
+  try {
+    if (fs.existsSync(GCS_URL_FILE)) {
+      const url = fs.readFileSync(GCS_URL_FILE, 'utf-8').trim();
+      console.log(`📎 URL GCS precedente: ${url}`);
+      return url;
+    }
+    return null;
+  } catch (error) {
+    console.error('❌ Errore nel recupero URL GCS:', error.message);
+    return null;
   }
 }
 
@@ -514,7 +583,9 @@ async function processAllUrls() {
   console.log(`   🆕 Nuove auto: ${newCars.length}`);
   console.log(`   ⏭️  Già viste: ${allCarUrls.length - newCars.length}\n`);
 
-  // Se ci sono nuove auto, aggiorna il database e notifica
+  let gcsUrl = null;
+
+  // Se ci sono nuove auto, aggiorna il database e rigenera tutto
   if (newCars.length > 0) {
     // Il database contiene TUTTE le auto (vecchie + nuove)
     carsDatabase = [...allCarsFound];
@@ -525,15 +596,20 @@ async function processAllUrls() {
     // Genera il report Excel con immagini (tutte le auto, nuove in verde)
     await generateExcelReport();
     
+    // Carica il report Excel su Google Cloud Storage
+    gcsUrl = await uploadExcelToGCS();
+    
     // Salva tutti i dettagli nel file di stato
     saveSeenCars(allCarsFound);
     
-    // Invia notifica Telegram
-    await sendExcelToTelegram(newCars.length);
-    
   } else {
-    console.log('ℹ️  Nessuna nuova auto trovata, nessun aggiornamento necessario.');
+    console.log('ℹ️  Nessuna nuova auto trovata.');
+    // Usa l\'URL del file Excel precedente
+    gcsUrl = getLastGcsUrl();
   }
+
+  // Invia sempre la notifica Telegram con il link GCS
+  await sendTelegramNotification(newCars.length, allCarsFound.length, gcsUrl);
 }
 
 /**

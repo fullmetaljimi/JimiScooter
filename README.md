@@ -12,8 +12,11 @@ Il modulo **car_watcher** è pensato per essere deployato su una **VM Linux** e 
 - ✅ Scansioni automatiche alle 12:00 e 18:00 ogni giorno
 - ✅ Persistenza: memorizza auto già viste in `data/seen_cars.json`
 - ✅ Report Excel con foto di ogni auto
+- ✅ **Upload automatico su Google Cloud Storage** con URL pubblico
 - ✅ Notifiche Telegram solo per auto nuove
 - ✅ Ordinamento intelligente: anno recente → km bassi
+
+📖 **Storage pubblico**: [GCS_INTEGRATION.md](GCS_INTEGRATION.md)
 
 ### Quick Start (Linux VM)
 ```bash
