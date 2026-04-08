@@ -16,49 +16,57 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
       
-      - name: 🔑 Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: � Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
       
-      - name: 🔐 Add VM to known hosts
+      - name: ☁️ Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      
+      - name: 🔑 Setup SSH
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
+          ssh-keygen -t rsa -b 4096 -f ~/.ssh/google_compute_engine -N ""
       
       - name: 🚀 Deploy to VM
         env:
-          VM_USER: ${{ secrets.VM_USER }}
-          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_NAME: ${{ secrets.GCP_VM_NAME }}
+          GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
+          GCP_ZONE: ${{ secrets.GCP_ZONE }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          ssh $VM_USER@$VM_HOST << 'ENDSSH'
-            set -e
-            
-            echo "📂 Navigating to deployment directory..."
-            cd ${{ secrets.DEPLOY_PATH }}
-            
-            echo "🔄 Pulling latest changes..."
-            git pull origin main || git pull origin master
-            
-            echo "📦 Installing dependencies..."
-            npm install --production
-            
-            echo "🔧 Restarting PM2 process..."
-            if pm2 describe subito-notifier > /dev/null 2>&1; then
-              echo "♻️  PM2 process exists, restarting..."
-              pm2 restart subito-notifier
-              pm2 save
-            else
-              echo "🆕 First deployment, starting PM2..."
-              pm2 start ecosystem.config.js
-              pm2 save
-              pm2 startup
-            fi
-            
-            echo "✅ Deployment completed successfully!"
-            pm2 status
-          ENDSSH
+          gcloud compute ssh $GCP_VM_NAME \
+            --project=$GCP_PROJECT \
+            --zone=$GCP_ZONE \
+            --tunnel-through-iap \
+            --command='
+              set -e
+              
+              echo "📂 Navigating to deployment directory..."
+              cd '"$DEPLOY_PATH"'
+              
+              echo "🔄 Pulling latest changes..."
+              git pull origin main || git pull origin master
+              
+              echo "📦 Installing dependencies..."
+              npm install --production
+              
+              echo "🔧 Restarting PM2 process..."
+              if pm2 describe subito-notifier > /dev/null 2>&1; then
+                echo "♻️  PM2 process exists, restarting..."
+                pm2 restart subito-notifier
+                pm2 save
+              else
+                echo "🆕 First deployment, starting PM2..."
+                pm2 start ecosystem.config.js
+                pm2 save
+                pm2 startup
+              fi
+              
+              echo "✅ Deployment completed successfully!"
+              pm2 status
+            '
       
       - name: 📊 Deployment Summary
         if: success()
@@ -68,7 +76,8 @@ jobs:
           echo "- 🎯 Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- 📝 Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- 👤 Author: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "- 🖥️  VM: \`${{ secrets.VM_HOST }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- 🖥️  VM: \`${{ secrets.GCP_VM_NAME }}\` (via IAP)" >> $GITHUB_STEP_SUMMARY
+          echo "- ☁️  Project: \`${{ secrets.GCP_PROJECT }}\`" >> $GITHUB_STEP_SUMMARY
       
       - name: ❌ Deployment Failed
         if: failure()
