@@ -19,8 +19,8 @@ const GCS_URL_FILE = path.join(__dirname, '..', 'data', 'last_gcs_url.txt');
 // Google Cloud Storage configuration
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'subito-notifier-files';
 const GCS_FILE_NAME = 'report_auto.xlsx';
-// Usa le credenziali application default (gcloud auth application-default login)
-// oppure la variabile GOOGLE_APPLICATION_CREDENTIALS
+// Su GCP Compute Engine usa automaticamente le credenziali del service account della VM
+// (stesso meccanismo usato da gsutil). Non serve GOOGLE_APPLICATION_CREDENTIALS.
 const storage = new Storage({
   projectId: process.env.GCP_PROJECT_ID || undefined
 });

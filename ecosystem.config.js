@@ -47,8 +47,7 @@ module.exports = {
       // ========================================
       env: {
         NODE_ENV: 'production',
-        TZ: 'Europe/Rome',
-        GOOGLE_APPLICATION_CREDENTIALS: '/home/muscari_luca/.config/gcloud/application_default_credentials.json'
+        TZ: 'Europe/Rome'
       },
       
       // ========================================
