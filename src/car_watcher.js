@@ -612,9 +612,12 @@ async function processAllUrls() {
     // Se non disponibile, rigenera Excel e carica su GCS
     if (!gcsUrl) {
       console.log('⚠️  URL GCS non trovato, rigenero Excel e ricarico su GCS...');
+      console.log(`🔍 DEBUG: allCarsFound.length = ${allCarsFound.length}`);
+      console.log(`🔍 DEBUG: carsBySourceUrl.size = ${carsBySourceUrl.size}`);
       carsDatabase = [...allCarsFound];
       await generateExcelReport();
       gcsUrl = await uploadExcelToGCS();
+      console.log(`🔍 DEBUG: gcsUrl dopo upload = ${gcsUrl}`);
     }
   }
 
