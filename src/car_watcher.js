@@ -228,9 +228,14 @@ function getLastGcsUrl() {
   try {
     if (fs.existsSync(GCS_URL_FILE)) {
       const url = fs.readFileSync(GCS_URL_FILE, 'utf-8').trim();
+      if (!url) {
+        console.log('⚠️  File last_gcs_url.txt esiste ma è vuoto');
+        return null;
+      }
       console.log(`📎 URL GCS precedente: ${url}`);
       return url;
     }
+    console.log('⚠️  File last_gcs_url.txt non trovato');
     return null;
   } catch (error) {
     console.error('❌ Errore nel recupero URL GCS:', error.message);
@@ -609,6 +614,7 @@ async function processAllUrls() {
     console.log('ℹ️  Nessuna nuova auto trovata.');
     // Prova prima a usare l'URL precedente
     gcsUrl = getLastGcsUrl();
+    console.log(`🔍 DEBUG gcsUrl dopo getLastGcsUrl: "${gcsUrl}" (type: ${typeof gcsUrl}, length: ${gcsUrl ? gcsUrl.length : 'N/A'})`);
     // Se non disponibile, rigenera Excel e carica su GCS
     if (!gcsUrl) {
       console.log('⚠️  URL GCS non trovato, rigenero Excel e ricarico su GCS...');
