@@ -19,7 +19,11 @@ const GCS_URL_FILE = path.join(__dirname, '..', 'data', 'last_gcs_url.txt');
 // Google Cloud Storage configuration
 const GCS_BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'subito-notifier-files';
 const GCS_FILE_NAME = 'report_auto.xlsx';
-const storage = new Storage(); // Usa le credenziali del service account sulla VM
+// Usa le credenziali application default (gcloud auth application-default login)
+// oppure la variabile GOOGLE_APPLICATION_CREDENTIALS
+const storage = new Storage({
+  projectId: process.env.GCP_PROJECT_ID || undefined
+});
 
 // Array di URL da ispezionare - configurabile
 /* Commentati per test veloce:
@@ -190,14 +194,21 @@ async function uploadExcelToGCS() {
     
     // Upload del file
     console.log(`📤 Caricamento su gs://${GCS_BUCKET_NAME}/${GCS_FILE_NAME}...`);
-    await bucket.upload(EXCEL_REPORT_PATH, {
-      destination: GCS_FILE_NAME,
-      metadata: {
-        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        cacheControl: 'public, max-age=300', // Cache 5 minuti
-      },
-      public: true, // Rende il file pubblicamente accessibile
-    });
+    try {
+      await bucket.upload(EXCEL_REPORT_PATH, {
+        destination: GCS_FILE_NAME,
+        metadata: {
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          cacheControl: 'public, max-age=300',
+        },
+        public: true,
+      });
+    } catch (uploadErr) {
+      console.error('❌ Errore specifico durante bucket.upload:', uploadErr.message);
+      console.error('❌ Code:', uploadErr.code);
+      console.error('❌ Errors:', JSON.stringify(uploadErr.errors));
+      throw uploadErr;
+    }
 
     // URL pubblico del file
     const publicUrl = `https://storage.googleapis.com/${GCS_BUCKET_NAME}/${GCS_FILE_NAME}`;
