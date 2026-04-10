@@ -212,6 +212,9 @@ async function uploadExcelToGCS() {
     
   } catch (error) {
     console.error('❌ Errore nel caricamento su GCS:', error.message);
+    console.error('❌ Stack:', error.stack);
+    console.error('❌ GCS_BUCKET_NAME:', GCS_BUCKET_NAME);
+    console.error('❌ GOOGLE_APPLICATION_CREDENTIALS:', process.env.GOOGLE_APPLICATION_CREDENTIALS || 'non impostata');
     // Non blocchiamo l'esecuzione se fallisce l'upload
     return null;
   }
