@@ -604,8 +604,15 @@ async function processAllUrls() {
     
   } else {
     console.log('ℹ️  Nessuna nuova auto trovata.');
-    // Usa l\'URL del file Excel precedente
+    // Prova prima a usare l'URL precedente
     gcsUrl = getLastGcsUrl();
+    // Se non disponibile, rigenera Excel e carica su GCS
+    if (!gcsUrl) {
+      console.log('⚠️  URL GCS non trovato, rigenero Excel e ricarico su GCS...');
+      carsDatabase = [...allCarsFound];
+      await generateExcelReport();
+      gcsUrl = await uploadExcelToGCS();
+    }
   }
 
   // Invia sempre la notifica Telegram con il link GCS
