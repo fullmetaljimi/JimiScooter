@@ -85,6 +85,19 @@ Per un file Excel di ~500KB aggiornato più volte al giorno, il costo è **trasc
 
 ## Troubleshooting
 
+### ❌ Errore: "Provided scope(s) are not authorized" (403)
+
+**Problema più comune!** La VM non ha gli scope OAuth corretti per accedere a GCS.
+
+**Soluzione**: Vedi la guida completa in **[FIX_GCS_SCOPES.md](FIX_GCS_SCOPES.md)**
+
+**Quick fix:**
+1. Console GCP → Compute Engine → Arresta la VM
+2. Modifica VM → Access scopes → "Allow full access to all Cloud APIs"  
+3. Riavvia la VM
+
+---
+
 ### Errore: "Bucket not found"
 
 Verifica che il bucket sia stato creato:

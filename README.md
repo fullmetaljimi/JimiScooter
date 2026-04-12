@@ -93,3 +93,37 @@ Note di sicurezza
 Limitazioni
 
 - Il parser di `subito_watcher` usa una euristica semplice per estrarre link e titoli. Se Subito.it cambia markup potrebbe essere necessario adattarlo.
+
+---
+
+## 🔧 Troubleshooting
+
+### ❌ GCS Upload - Errore 403 "Provided scope(s) are not authorized"
+
+Se vedi questo errore nei log, significa che la VM non ha gli scope OAuth corretti per accedere a Google Cloud Storage.
+
+**Test rapido:**
+```bash
+node test_gcs_scopes.js
+```
+
+**Soluzione completa:** Vedi [FIX_GCS_SCOPES.md](FIX_GCS_SCOPES.md)
+
+**Quick fix:**
+1. Console GCP → Compute Engine → Arresta la VM
+2. Modifica VM → Access scopes → "Allow full access to all Cloud APIs"
+3. Riavvia la VM
+
+### ❌ PM2 non riavvia dopo reboot
+
+```bash
+pm2 startup
+# Segui le istruzioni mostrate
+pm2 save
+```
+
+### 📋 Altri problemi
+
+- **Deploy GCP**: [DEPLOY_GCP.md](DEPLOY_GCP.md)
+- **GitHub Actions**: [GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md)
+- **GCS Integration**: [GCS_INTEGRATION.md](GCS_INTEGRATION.md)

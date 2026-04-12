@@ -211,7 +211,23 @@ async function uploadExcelToGCS() {
     return publicUrl;
     
   } catch (error) {
-    console.error('❌ Errore nel caricamento su GCS:', error.message);
+    console.error('\n❌ ERRORE UPLOAD GCS:', error.message);
+    
+    // Diagnostica dettagliata per errori 403
+    if (error.code === 403 || (error.errors && error.errors[0]?.reason === 'forbidden')) {
+      console.error('\n🔧 DIAGNOSI: Scope OAuth non autorizzati');
+      console.error('');
+      console.error('💡 SOLUZIONE:');
+      console.error('   1. Arresta la VM dalla Console GCP');
+      console.error('   2. Modifica VM → Access scopes → "Allow full access to all Cloud APIs"');
+      console.error('   3. Riavvia la VM');
+      console.error('');
+      console.error('📖 Guida completa: FIX_GCS_SCOPES.md');
+      console.error('');
+      console.error(`🔍 Bucket: ${GCS_BUCKET_NAME}`);
+      console.error(`🔍 GOOGLE_APPLICATION_CREDENTIALS: ${process.env.GOOGLE_APPLICATION_CREDENTIALS || 'non impostata (usa default VM)'}`);
+    }
+    
     // Non blocchiamo l'esecuzione se fallisce l'upload
     return null;
   }
