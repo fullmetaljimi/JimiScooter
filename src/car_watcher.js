@@ -773,8 +773,19 @@ async function generateExcelReport() {
     console.log('⚠️  Nessuna auto da esportare.');
     return;
   }
-  
-  console.log(`📁 Creazione fogli separati per ${carsBySourceUrl.size} ricerche...`);
+
+  // Ricostruisce carsBySourceUrl da carsDatabase per garantire che
+  // TUTTE le auto (vecchie + nuove) siano incluse nell'Excel
+  const excelCarsBySource = new Map();
+  for (const car of carsDatabase) {
+    const key = car.sourceUrl || 'Altro';
+    if (!excelCarsBySource.has(key)) {
+      excelCarsBySource.set(key, []);
+    }
+    excelCarsBySource.get(key).push(car);
+  }
+
+  console.log(`📁 Creazione fogli separati per ${excelCarsBySource.size} ricerche (${carsDatabase.length} auto totali)...`);
 
   // Crea il workbook
   const workbook = new ExcelJS.Workbook();
@@ -790,7 +801,7 @@ async function generateExcelReport() {
   let totalImages = 0;
   
   // Per ogni URL di ricerca, crea un foglio separato
-  for (const [sourceUrl, cars] of carsBySourceUrl.entries()) {
+  for (const [sourceUrl, cars] of excelCarsBySource.entries()) {
     const modelName = extractModelNameFromUrl(sourceUrl);
     console.log(`\n📄 Creazione foglio "${modelName}" con ${cars.length} auto...`);
     
