@@ -38,10 +38,8 @@ const URLS = [
 
 // Storage per i dati delle auto
 let carsDatabase = [];
-let carsBySourceUrl = new Map(); // Mappa: sourceUrl -> array di auto
 let processedUrls = new Set();
-let seenCarsUrls = new Set(); // URL già visti nelle scansioni precedenti
-let seenCarsDetails = new Map(); // Dettagli completi delle auto già viste (URL -> dettagli)
+let seenCarsUrls = new Set(); // URL visti nella scansione precedente
 
 /**
  * Estrae il nome del modello dall'URL di ricerca
@@ -63,7 +61,7 @@ function extractModelNameFromUrl(url) {
 }
 
 /**
- * Carica gli annunci già visti dal file JSON
+ * Carica gli URL già visti dalla scansione precedente
  */
 function loadSeenCars() {
   try {
@@ -71,44 +69,29 @@ function loadSeenCars() {
       const data = fs.readFileSync(SEEN_CARS_FILE, 'utf-8');
       const seenData = JSON.parse(data);
       seenCarsUrls = new Set(seenData.urls || []);
-      
-      // Carica anche i dettagli completi delle auto
-      if (seenData.carsDetails && Array.isArray(seenData.carsDetails)) {
-        seenCarsDetails = new Map(seenData.carsDetails.map(car => [car.url, car]));
-        console.log(`📂 Caricati ${seenCarsUrls.size} annunci già visti dall'archivio (${seenCarsDetails.size} con dettagli)`);
-      } else {
-        console.log(`📂 Caricati ${seenCarsUrls.size} annunci già visti dall'archivio`);
-      }
+      console.log(`📂 Caricati ${seenCarsUrls.size} URL dalla scansione precedente`);
     } else {
-      console.log('📂 Nessun archivio precedente trovato, prima scansione');
+      console.log('📂 Nessuna scansione precedente trovata, prima esecuzione');
     }
   } catch (error) {
     console.error('⚠️  Errore nel caricamento archivio:', error.message);
     seenCarsUrls = new Set();
-    seenCarsDetails = new Map();
   }
 }
 
 /**
- * Salva gli annunci visti nel file JSON
+ * Salva gli URL degli annunci visti nel file JSON
  */
 function saveSeenCars(allCarsWithDetails) {
   try {
-    // Aggiorna i dettagli di tutte le auto
-    allCarsWithDetails.forEach(car => {
-      seenCarsUrls.add(car.url);
-      seenCarsDetails.set(car.url, car);
-    });
-    
+    const urls = allCarsWithDetails.map(car => car.url);
     const dataToSave = {
       lastUpdate: new Date().toISOString(),
-      totalCars: seenCarsUrls.size,
-      urls: Array.from(seenCarsUrls),
-      carsDetails: Array.from(seenCarsDetails.values())
+      totalCars: urls.length,
+      urls: urls
     };
-    
     fs.writeFileSync(SEEN_CARS_FILE, JSON.stringify(dataToSave, null, 2), 'utf-8');
-    console.log(`💾 Archivio aggiornato: ${seenCarsUrls.size} annunci totali`);
+    console.log(`💾 Archivio aggiornato: ${urls.length} URL salvati`);
   } catch (error) {
     console.error('⚠️  Errore nel salvataggio archivio:', error.message);
   }
@@ -531,127 +514,69 @@ async function extractCarDetails(carUrl, sourceUrl = null) {
  */
 async function processAllUrls() {
   console.log('\n🚗 === INIZIO SCANSIONE AUTO ===\n');
-  
-  // Carica gli annunci già visti
+
+  // Carica gli URL visti nella scansione precedente (solo per sapere quali sono "nuovi")
   loadSeenCars();
-  
-  // Resetta la mappa per la nuova scansione
-  carsBySourceUrl.clear();
-  
-  const allCarsFound = [];
-  const allCarUrls = [];
+
+  const allCarsFound = []; // Tutte le auto trovate SUL SITO in questa scansione
 
   for (const listUrl of URLS) {
     console.log(`\n📋 Processo lista: ${listUrl}`);
-    
+
     // Rileva tutte le pagine disponibili
     const allPages = await detectAllPages(listUrl);
-    
+
     // Estrai i link agli annunci da tutte le pagine
     const allCarLinksFromThisList = [];
-    
     for (const pageUrl of allPages) {
       if (allPages.length > 1) {
         console.log(`  📄 Pagina: ${pageUrl}`);
       }
       const carLinks = await extractCarLinksFromList(pageUrl);
       allCarLinksFromThisList.push(...carLinks);
-      
-      // Piccola pausa tra le pagine
+
       if (allPages.indexOf(pageUrl) < allPages.length - 1) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
-    
+
     // Rimuovi duplicati
     const uniqueCarLinks = [...new Set(allCarLinksFromThisList)];
     console.log(`🔢 Totale annunci unici trovati: ${uniqueCarLinks.length}`);
-    
-    // Per ogni annuncio, estrai i dettagli
+
+    // Per ogni annuncio, scarica SEMPRE i dettagli dal sito
     for (const carUrl of uniqueCarLinks) {
-      allCarUrls.push(carUrl);
-      
-      let carDetails = null;
-      
-      // Se l'auto è già stata vista, prova a usare i dettagli salvati
-      if (seenCarsUrls.size > 0 && seenCarsUrls.has(carUrl)) {
-        // Recupera i dettagli salvati se disponibili
-        if (seenCarsDetails.has(carUrl)) {
-          console.log(`  ⏭️  Già visto (cached): ${carUrl.split('/').pop()}`);
-          carDetails = {...seenCarsDetails.get(carUrl)}; // Copia i dettagli
-          carDetails.isNew = false; // Assicurati che sia marcato come non nuovo
-        } else {
-          // Auto già vista ma senza dettagli salvati: scarica i dettagli
-          console.log(`  🔄 Già visto (recupero dettagli): ${carUrl.split('/').pop()}`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          carDetails = await extractCarDetails(carUrl, listUrl);
-          if (carDetails) {
-            carDetails.isNew = false; // Non è nuova, la conoscevamo già
-          }
-        }
-      } else {
-        // Nuova auto: scarica i dettagli
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        carDetails = await extractCarDetails(carUrl, listUrl);
-      }
-      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const carDetails = await extractCarDetails(carUrl, listUrl);
       if (carDetails) {
+        // isNew viene settato in extractCarDetails confrontando con seenCarsUrls
         allCarsFound.push(carDetails);
-        
-        // Organizza per URL di origine
-        if (!carsBySourceUrl.has(listUrl)) {
-          carsBySourceUrl.set(listUrl, []);
-        }
-        carsBySourceUrl.get(listUrl).push(carDetails);
       }
     }
   }
 
-  // Filtra solo le auto realmente nuove
+  // Filtra solo le auto nuove (non presenti nella scansione precedente)
   const newCars = allCarsFound.filter(car => car.isNew);
-  
+
   console.log(`\n✅ Scansione completata!`);
-  console.log(`   📊 Annunci totali trovati: ${allCarUrls.length}`);
+  console.log(`   📊 Auto trovate sul sito: ${allCarsFound.length}`);
   console.log(`   🆕 Nuove auto: ${newCars.length}`);
-  console.log(`   ⏭️  Già viste: ${allCarUrls.length - newCars.length}\n`);
+  console.log(`   ⏭️  Già viste: ${allCarsFound.length - newCars.length}\n`);
 
-  let gcsUrl = null;
+  // Il database contiene TUTTE le auto trovate sul sito ora
+  carsDatabase = allCarsFound;
 
-  // Se ci sono nuove auto, aggiorna il database e rigenera tutto
-  if (newCars.length > 0) {
-    // Il database contiene TUTTE le auto (vecchie + nuove)
-    carsDatabase = [...allCarsFound];
+  // Genera SEMPRE l'Excel con tutte le auto (nuove in verde)
+  generateReport();
+  await generateExcelReport();
 
-    // Genera il report console
-    generateReport();
-    
-    // Genera il report Excel con immagini (tutte le auto, nuove in verde)
-    await generateExcelReport();
-    
-    // Carica il report Excel su Google Cloud Storage
-    gcsUrl = await uploadExcelToGCS();
-    
-    // Salva tutti i dettagli nel file di stato
-    saveSeenCars(allCarsFound);
-    
-  } else {
-    console.log('ℹ️  Nessuna nuova auto trovata.');
-    // Prova prima a usare l'URL precedente
-    gcsUrl = getLastGcsUrl();
-    console.log(`🔍 DEBUG gcsUrl dopo getLastGcsUrl: "${gcsUrl}" (type: ${typeof gcsUrl}, length: ${gcsUrl ? gcsUrl.length : 'N/A'})`);
-    // Se non disponibile, rigenera Excel e carica su GCS
-    if (!gcsUrl) {
-      console.log('⚠️  URL GCS non trovato, rigenero Excel e ricarico su GCS...');
-      console.log(`🔍 DEBUG: allCarsFound.length = ${allCarsFound.length}`);
-      console.log(`🔍 DEBUG: carsBySourceUrl.size = ${carsBySourceUrl.size}`);
-      carsDatabase = [...allCarsFound];
-      await generateExcelReport();
-      gcsUrl = await uploadExcelToGCS();
-      console.log(`🔍 DEBUG: gcsUrl dopo upload = ${gcsUrl}`);
-    }
-  }
+  // Carica SEMPRE su GCS sovrascrivendo il file precedente
+  const gcsUrl = await uploadExcelToGCS();
 
-  // Invia sempre la notifica Telegram con il link GCS
+  // Salva gli URL trovati ora come "visti" per la prossima scansione
+  saveSeenCars(allCarsFound);
+
+  // Invia la notifica Telegram
   await sendTelegramNotification(newCars.length, allCarsFound.length, gcsUrl);
 }
 
