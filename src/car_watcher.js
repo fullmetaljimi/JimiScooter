@@ -135,9 +135,10 @@ function saveSeenCars(allCarsWithDetails) {
  * Invia notifica Telegram con link al file Excel su GCS
  * @param {number} newCarsCount - Numero di nuove auto trovate
  * @param {number} totalCarsCount - Numero totale di auto nel database
+ * @param {number} removedCarsCount - Numero di auto rimosse dal sito
  * @param {string} gcsUrl - URL pubblico del file su Google Cloud Storage
  */
-async function sendTelegramNotification(newCarsCount, totalCarsCount, gcsUrl) {
+async function sendTelegramNotification(newCarsCount, totalCarsCount, removedCarsCount, gcsUrl) {
   try {
     // Carica configurazione Telegram
     const configPath = path.join(__dirname, '..', 'config', 'config.json');
@@ -168,15 +169,25 @@ async function sendTelegramNotification(newCarsCount, totalCarsCount, gcsUrl) {
     if (newCarsCount > 0) {
       message = `🚗 <b>Nuove Auto Trovate!</b>\n\n` +
                 `✨ <b>${newCarsCount}</b> ${newCarsCount === 1 ? 'nuova auto' : 'nuove auto'} disponibili\n` +
-                `📊 Totale auto in catalogo: <b>${totalCarsCount}</b>\n\n` +
-                `🔍 Ordinate per anno più recente e km minori\n` +
+                `📊 Totale auto in catalogo: <b>${totalCarsCount}</b>\n`;
+      
+      if (removedCarsCount > 0) {
+        message += `🗑️ <b>${removedCarsCount}</b> ${removedCarsCount === 1 ? 'annuncio rimosso' : 'annunci rimossi'}\n`;
+      }
+      
+      message += `\n🔍 Ordinate per anno più recente e km minori\n` +
                 `📅 ${new Date().toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n\n` +
                 `📥 <a href="${gcsUrl}">Scarica Report Excel</a>`;
     } else {
       message = `✅ <b>Scansione Auto Completata</b>\n\n` +
                 `ℹ️  Nessuna nuova auto trovata\n` +
-                `📊 Totale auto in catalogo: <b>${totalCarsCount}</b>\n\n` +
-                `📅 ${new Date().toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n\n` +
+                `📊 Totale auto in catalogo: <b>${totalCarsCount}</b>\n`;
+      
+      if (removedCarsCount > 0) {
+        message += `🗑️ <b>${removedCarsCount}</b> ${removedCarsCount === 1 ? 'annuncio rimosso' : 'annunci rimossi'}\n`;
+      }
+      
+      message += `\n📅 ${new Date().toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n\n` +
                 `📥 <a href="${gcsUrl}">Scarica Report Excel</a>`;
     }
     
@@ -598,10 +609,25 @@ async function processAllUrls() {
   // Filtra solo le auto nuove (non presenti nella scansione precedente)
   const newCars = allCarsFound.filter(car => car.isNew);
 
+  // Calcola quante auto sono state rimosse dal sito
+  const currentUrls = new Set(allCarsFound.map(car => car.url));
+  const removedUrls = Array.from(seenCarsUrls).filter(url => !currentUrls.has(url));
+  
   console.log(`\n✅ Scansione completata!`);
   console.log(`   📊 Auto trovate sul sito: ${allCarsFound.length}`);
   console.log(`   🆕 Nuove auto: ${newCars.length}`);
-  console.log(`   ⏭️  Già viste: ${allCarsFound.length - newCars.length}\n`);
+  console.log(`   ⏭️  Già viste: ${allCarsFound.length - newCars.length}`);
+  console.log(`   🗑️  Annunci rimossi dal sito: ${removedUrls.length}`);
+  
+  if (removedUrls.length > 0) {
+    console.log(`\n🗑️  === ANNUNCI RIMOSSI DAL SITO ===`);
+    removedUrls.forEach((url, index) => {
+      console.log(`   ${index + 1}. ${url}`);
+    });
+    console.log(`\n   ℹ️  Questi annunci saranno rimossi dall'Excel e dallo storico\n`);
+  } else {
+    console.log(`   ℹ️  Nessun annuncio rimosso\n`);
+  }
 
   // Il database contiene TUTTE le auto trovate sul sito ora
   carsDatabase = allCarsFound;
@@ -618,7 +644,7 @@ async function processAllUrls() {
   const gcsUrl = await uploadExcelToGCS();
 
   // Invia la notifica Telegram
-  await sendTelegramNotification(newCars.length, allCarsFound.length, gcsUrl);
+  await sendTelegramNotification(newCars.length, allCarsFound.length, removedUrls.length, gcsUrl);
 }
 
 /**
