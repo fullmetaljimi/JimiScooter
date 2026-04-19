@@ -70,11 +70,21 @@ function loadSeenCars() {
       const seenData = JSON.parse(data);
       seenCarsUrls = new Set(seenData.urls || []);
       console.log(`📂 Caricati ${seenCarsUrls.size} URL dalla scansione precedente`);
+      console.log(`📅 Ultimo aggiornamento: ${seenData.lastUpdate || 'N/A'}`);
+      
+      // Debug: mostra i primi 3 URL per verificare il formato
+      const firstUrls = Array.from(seenCarsUrls).slice(0, 3);
+      if (firstUrls.length > 0) {
+        console.log(`🔍 Esempio URL caricati:`);
+        firstUrls.forEach(url => console.log(`   - ${url}`));
+      }
     } else {
       console.log('📂 Nessuna scansione precedente trovata, prima esecuzione');
+      seenCarsUrls = new Set();
     }
   } catch (error) {
     console.error('⚠️  Errore nel caricamento archivio:', error.message);
+    console.error('Stack:', error.stack);
     seenCarsUrls = new Set();
   }
 }
@@ -90,10 +100,34 @@ function saveSeenCars(allCarsWithDetails) {
       totalCars: urls.length,
       urls: urls
     };
+    
+    // Assicurati che la directory esista
+    const dir = path.dirname(SEEN_CARS_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    
     fs.writeFileSync(SEEN_CARS_FILE, JSON.stringify(dataToSave, null, 2), 'utf-8');
     console.log(`💾 Archivio aggiornato: ${urls.length} URL salvati`);
+    console.log(`📅 Data aggiornamento: ${dataToSave.lastUpdate}`);
+    console.log(`📍 File salvato in: ${SEEN_CARS_FILE}`);
+    
+    // Debug: mostra i primi 3 URL salvati
+    if (urls.length > 0) {
+      console.log(`🔍 Esempio URL salvati:`);
+      urls.slice(0, 3).forEach(url => console.log(`   - ${url}`));
+    }
+    
+    // Verifica che il file sia stato scritto correttamente
+    if (fs.existsSync(SEEN_CARS_FILE)) {
+      const fileSize = fs.statSync(SEEN_CARS_FILE).size;
+      console.log(`✅ File verificato: ${fileSize} bytes`);
+    } else {
+      console.error('❌ ATTENZIONE: Il file non esiste dopo il salvataggio!');
+    }
   } catch (error) {
     console.error('⚠️  Errore nel salvataggio archivio:', error.message);
+    console.error('Stack:', error.stack);
   }
 }
 
@@ -368,6 +402,12 @@ async function extractCarDetails(carUrl, sourceUrl = null) {
     
     // Controlla se l'auto è già stata vista in scansioni precedenti
     const isNewCar = !seenCarsUrls.has(carUrl);
+    
+    if (isNewCar) {
+      console.log(`  ✨ NUOVA auto rilevata!`);
+    } else {
+      console.log(`  ♻️  Auto già vista in precedenza`);
+    }
 
     console.log(`  📄 Analizzo: ${carUrl}`);
     const { data } = await axios.get(carUrl, {
@@ -566,15 +606,16 @@ async function processAllUrls() {
   // Il database contiene TUTTE le auto trovate sul sito ora
   carsDatabase = allCarsFound;
 
+  // SALVA GLI URL VISTI SUBITO, prima di generare Excel/upload che potrebbero fallire
+  // Questo garantisce che alla prossima scansione gli annunci non siano più "nuovi"
+  saveSeenCars(allCarsFound);
+
   // Genera SEMPRE l'Excel con tutte le auto (nuove in verde)
   generateReport();
   await generateExcelReport();
 
   // Carica SEMPRE su GCS sovrascrivendo il file precedente
   const gcsUrl = await uploadExcelToGCS();
-
-  // Salva gli URL trovati ora come "visti" per la prossima scansione
-  saveSeenCars(allCarsFound);
 
   // Invia la notifica Telegram
   await sendTelegramNotification(newCars.length, allCarsFound.length, gcsUrl);
