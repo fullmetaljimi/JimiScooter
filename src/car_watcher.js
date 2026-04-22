@@ -566,6 +566,9 @@ async function extractCarDetails(carUrl, sourceUrl = null) {
 async function processAllUrls() {
   console.log('\n🚗 === INIZIO SCANSIONE AUTO ===\n');
 
+  // Resetta gli URL già processati in questa sessione
+  processedUrls.clear();
+
   // Carica gli URL visti nella scansione precedente (solo per sapere quali sono "nuovi")
   loadSeenCars();
 
@@ -968,7 +971,7 @@ async function generateExcelReport() {
   
   console.log(`\n✅ Report Excel generato con successo!`);
   console.log(`📁 Percorso: ${excelPath}`);
-  console.log(`📊 Totale fogli: ${carsBySourceUrl.size}`);
+  console.log(`📊 Totale fogli: ${excelCarsBySource.size}`);
   console.log(`📊 Totale auto: ${carsDatabase.length}\n`);
 }
 
